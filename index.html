@@ -330,7 +330,7 @@ function normalizeStatus(s) { const x = trim(s).toLowerCase(); if (x === "live" 
 function isLocked(match) { const st = normalizeStatus(match.status); if (st === "live" || st === "finished") return true; if (!match.match_date) return false; return new Date(match.match_date) <= new Date(); }
 function formatKickoff(iso) { if (!iso) return "Kickoff TBC"; const d = new Date(iso); if (Number.isNaN(d.getTime())) return "Kickoff TBC"; return d.toLocaleString(undefined, { weekday:"short", month:"short", day:"numeric", hour:"2-digit", minute:"2-digit" }); }
 function getOutcome(match) { if (match.home_score == null || match.away_score == null) return null; if (match.home_score > match.away_score) return "home"; if (match.home_score < match.away_score) return "away"; return "draw"; }
-function pickLabel(pick) { return {home:"Home win",draw:"Draw",away:"Away win"}[pick]||pick; }
+function pickLabel(pick) { return {home:"Local",draw:"Empate",away:"Visitante"}[pick]||pick; }
 function isAdmin() { return ADMIN_EMAILS.includes(currentUser?.email); }
 function showBootError(msg) { authBootError.textContent = msg; authBootError.classList.add("visible"); }
 
@@ -523,9 +523,9 @@ function renderMatches() {
       <div class="prediction-section">
         <div class="prediction-title">Your prediction${activePick ? ` — ${pickLabel(activePick)}` : ""}</div>
         <div class="pick-row">
-          <button type="button" class="pick-btn${activePick==="home" ? (st==="finished"&&outcome ? (outcome==="home"?" correct":" wrong") : " selected") : ""}" data-pick="home" ${locked?"disabled":""}>Home win<span>${teamIcon(match.home_team)} ${shortTeam(match.home_team)}</span></button>
-          <button type="button" class="pick-btn${activePick==="draw" ? (st==="finished"&&outcome ? (outcome==="draw"?" correct":" wrong") : " selected") : ""}" data-pick="draw" ${locked?"disabled":""}>Draw<span>🤝 Tie</span></button>
-          <button type="button" class="pick-btn${activePick==="away" ? (st==="finished"&&outcome ? (outcome==="away"?" correct":" wrong") : " selected") : ""}" data-pick="away" ${locked?"disabled":""}>Away win<span>${teamIcon(match.away_team)} ${shortTeam(match.away_team)}</span></button>
+          <button type="button" class="pick-btn${activePick==="home" ? (st==="finished"&&outcome ? (outcome==="home"?" correct":" wrong") : " selected") : ""}" data-pick="home" ${locked?"disabled":""}>Local<span>${teamIcon(match.home_team)} ${shortTeam(match.home_team)}</span></button>
+          <button type="button" class="pick-btn${activePick==="draw" ? (st==="finished"&&outcome ? (outcome==="draw"?" correct":" wrong") : " selected") : ""}" data-pick="draw" ${locked?"disabled":""}>Empate<span>🤝 Empate</span></button>
+          <button type="button" class="pick-btn${activePick==="away" ? (st==="finished"&&outcome ? (outcome==="away"?" correct":" wrong") : " selected") : ""}" data-pick="away" ${locked?"disabled":""}>Visitante<span>${teamIcon(match.away_team)} ${shortTeam(match.away_team)}</span></button>
         </div>
       </div>`;
     const pickBtns = li.querySelectorAll(".pick-btn");
