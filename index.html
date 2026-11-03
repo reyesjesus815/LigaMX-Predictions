@@ -251,16 +251,32 @@
     <p class="page-desc">Add/remove matches and update scores.</p>
     <div class="admin-warn">🔒 Only visible to admins. Scores update leaderboard automatically.</div>
     <div class="admin-card">
+      <div class="admin-card-title">🗓️ Create Jornada</div>
+      <div class="add-match-form">
+        <div class="form-row">
+          <input class="form-input" id="new-jornada-number" type="number" min="1" placeholder="Number e.g. 15" />
+          <input class="form-input" id="new-jornada-season" placeholder="Season e.g. Clausura 2027" />
+        </div>
+        <div class="form-row">
+          <input class="form-input" id="new-jornada-deadline" type="datetime-local" />
+          <div></div>
+        </div>
+        <button class="add-btn" id="add-jornada-btn">Create Jornada</button>
+      </div>
+      <div id="jornada-list" style="margin-top:0.85rem;"></div>
+    </div>
+    <div class="admin-card">
       <div class="admin-card-title">➕ Add New Match</div>
       <div class="add-match-form">
+        <div class="form-row">
+          <select class="form-input" id="new-match-jornada"></select>
+          <input class="form-input" id="new-date" type="datetime-local" />
+        </div>
         <div class="form-row">
           <input class="form-input" id="new-home" placeholder="Home team e.g. America" />
           <input class="form-input" id="new-away" placeholder="Away team e.g. Chivas" />
         </div>
-        <div class="form-row">
-          <input class="form-input" id="new-comp" placeholder="Competition" value="Liga MX" />
-          <input class="form-input" id="new-date" type="datetime-local" />
-        </div>
+        <input class="form-input" id="new-comp" placeholder="Competition" value="Liga MX" />
         <button class="add-btn" id="add-match-btn">Add Match</button>
       </div>
     </div>
@@ -299,7 +315,7 @@ const ADMIN_EMAILS = ["reyes.jesus815@gmail.com"]; // add your partner's email h
 const ENTRY_FEE = 5;
 
 let sb = null, currentUser = null, isSignUp = false;
-let allMatches = [], allPredictions = [], allProfiles = [], leagueMembers = [];
+let allMatches = [], allPredictions = [], allProfiles = [], leagueMembers = [], allJornadas = [];
 let currentEntryIndex = 0;
 let userEntries = [];
 let pendingPicks = new Map();
@@ -625,6 +641,7 @@ function renderPot() {
 
 function renderAdmin() {
   if (!isAdmin()) return;
+  renderJornadaControls();
   const container = document.getElementById("admin-match-list");
   container.innerHTML = "";
   const matches = [...allMatches].sort((a,b) => {
@@ -678,20 +695,68 @@ function renderAdmin() {
   });
 }
 
+// Fill the "which jornada?" dropdown in the Add Match form, and list existing jornadas.
+function renderJornadaControls() {
+  const select = document.getElementById("new-match-jornada");
+  if (select) {
+    if (allJornadas.length === 0) {
+      select.innerHTML = '<option value="">Create a jornada first</option>';
+    } else {
+      select.innerHTML = allJornadas.map(j =>
+        `<option value="${j.id}">Jornada ${j.number} — ${trim(j.season)}</option>`
+      ).join("");
+    }
+  }
+  const list = document.getElementById("jornada-list");
+  if (list) {
+    if (allJornadas.length === 0) {
+      list.innerHTML = '<p style="font-size:0.78rem;color:var(--muted);">No jornadas yet.</p>';
+    } else {
+      list.innerHTML = allJornadas.map(j => {
+        const games = allMatches.filter(m => m.jornada_id === j.id).length;
+        const dl = j.deadline ? formatKickoff(j.deadline) : "no deadline";
+        return `<div style="font-size:0.8rem;color:var(--muted);padding:0.3rem 0;border-top:1px solid var(--border);">
+          <strong style="color:var(--text);">Jornada ${j.number}</strong> · ${trim(j.season)} · ${games} game(s) · closes ${dl} · <span style="color:${j.status==='open'?'var(--accent)':'var(--muted)'}">${j.status}</span>
+        </div>`;
+      }).join("");
+    }
+  }
+}
+
+// Create a new jornada (admin only — the database also enforces this).
+document.getElementById("add-jornada-btn").addEventListener("click", async () => {
+  const number = document.getElementById("new-jornada-number").value;
+  const season = document.getElementById("new-jornada-season").value.trim();
+  const deadline = document.getElementById("new-jornada-deadline").value;
+  if (!number || !season) { showToast("Enter a jornada number and season"); return; }
+  const { data, error } = await sb.from("jornadas")
+    .insert({ number: parseInt(number), season, deadline: deadline || null, status: "open" })
+    .select().single();
+  if (error) { showToast("Failed: " + error.message); return; }
+  allJornadas.unshift(data); // add to front (newest first)
+  document.getElementById("new-jornada-number").value = "";
+  document.getElementById("new-jornada-season").value = "";
+  document.getElementById("new-jornada-deadline").value = "";
+  showToast(`Jornada ${number} created! 🗓️`);
+  renderJornadaControls();
+});
+
 document.getElementById("add-match-btn").addEventListener("click", async () => {
+  const jornadaId = document.getElementById("new-match-jornada").value;
   const home = document.getElementById("new-home").value.trim();
   const away = document.getElementById("new-away").value.trim();
   const comp = document.getElementById("new-comp").value.trim();
   const date = document.getElementById("new-date").value;
+  if (!jornadaId) { showToast("Pick a jornada (create one first)"); return; }
   if (!home||!away) { showToast("Enter both team names"); return; }
-  const { data, error } = await sb.from("matches").insert({ home_team:home, away_team:away, competition:comp||"Liga MX", match_date:date||null, status:"upcoming" }).select().single();
+  const { data, error } = await sb.from("matches").insert({ jornada_id: parseInt(jornadaId), home_team:home, away_team:away, competition:comp||"Liga MX", match_date:date||null, status:"upcoming" }).select().single();
   if (error) { showToast("Failed: "+error.message); return; }
   allMatches.push(data);
   document.getElementById("new-home").value="";
   document.getElementById("new-away").value="";
   document.getElementById("new-date").value="";
   showToast(`${home} vs ${away} added! ⚽`);
-  renderAdmin(); renderMatches();
+  renderJornadaControls(); renderAdmin(); renderMatches();
 });
 
 async function ensureLeagueMembers() {
@@ -707,15 +772,17 @@ async function ensureLeagueMembers() {
 
 async function loadAppData() {
   matchList.innerHTML = '<li class="empty">Loading matches…</li>';
-  const [matchesRes, predsRes, profilesRes] = await Promise.all([
+  const [matchesRes, predsRes, profilesRes, jornadasRes] = await Promise.all([
     sb.from("matches").select("*").order("match_date",{ascending:true}),
     sb.from("predictions").select("*"),
     sb.from("profiles").select("*"),
+    sb.from("jornadas").select("*").order("number",{ascending:false}),
   ]);
   if (matchesRes.error) { matchList.innerHTML=`<li class="empty">${matchesRes.error.message}</li>`; return; }
   allMatches = matchesRes.data||[];
   allPredictions = predsRes.data||[];
   allProfiles = profilesRes.data||[];
+  allJornadas = jornadasRes.data||[];
   await ensureLeagueMembers();
   initEntries();
   renderMatches();
