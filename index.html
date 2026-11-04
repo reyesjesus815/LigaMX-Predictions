@@ -208,18 +208,22 @@
   </header>
 
   <section id="page-matches" class="page">
-    <h2 class="page-title">Matches</h2>
-    <p class="page-desc">Pick your results then hit Submit.</p>
+    <h2 class="page-title">Quinielas</h2>
+    <p class="page-desc">Elige una jornada y haz tus predicciones.</p>
+    <div class="entry-selector" id="jornada-selector">
+      <div class="entry-selector-title">🗓️ Jornada</div>
+      <select class="form-input" id="jornada-select"></select>
+    </div>
     <div id="entry-selector" class="entry-selector hidden">
-      <div class="entry-selector-title">🎟️ Your Entries — $5 each</div>
+      <div class="entry-selector-title">🎟️ Tus Quinielas</div>
       <div class="entry-tabs" id="entry-tabs"></div>
-      <button class="add-entry-btn" id="add-entry-btn">+ Add Entry ($5)</button>
+      <button class="add-entry-btn" id="add-entry-btn">+ Nueva Quiniela</button>
       <div class="entry-info" id="entry-info"></div>
     </div>
     <div id="matches-banner" class="banner hidden"></div>
     <ul id="match-list" class="match-list"></ul>
     <div class="submit-all-wrap">
-      <button class="submit-all-btn hidden" id="submit-all-btn">⚽ Submit All Predictions</button>
+      <button class="submit-all-btn hidden" id="submit-all-btn">⚽ Enviar Quiniela</button>
     </div>
   </section>
 
@@ -316,8 +320,9 @@ const ENTRY_FEE = 5;
 
 let sb = null, currentUser = null, isSignUp = false;
 let allMatches = [], allPredictions = [], allProfiles = [], leagueMembers = [], allJornadas = [];
-let currentEntryIndex = 0;
-let userEntries = [];
+let currentJornadaId = null;
+let userQuinielas = [];
+let currentQuinielaIndex = 0;
 let pendingPicks = new Map();
 
 const viewAuth = document.getElementById("view-auth");
@@ -437,56 +442,104 @@ document.querySelectorAll(".nav-item").forEach(btn => {
   });
 });
 
-function initEntries() {
-  const myPreds = allPredictions.filter(p => p.user_id === currentUser.id);
-  const entryNums = [...new Set(myPreds.map(p => p.entry_number || 1))].sort();
-  userEntries = entryNums.map(n => ({ number:n, label:`Entry ${n}`, predictions: new Map(myPreds.filter(p => (p.entry_number||1) === n).map(p => [p.match_id, p.pick])) }));
-  if (userEntries.length === 0) userEntries = [{ number:1, label:"Entry 1", predictions: new Map() }];
-  currentEntryIndex = 0;
-  pendingPicks = new Map(userEntries[0].predictions);
-  renderEntrySelector();
+// Matches that belong to the currently selected jornada, sorted by kickoff.
+function currentJornadaMatches() {
+  return allMatches
+    .filter(m => m.jornada_id === currentJornadaId)
+    .sort((a,b) => {
+      const da = a.match_date ? new Date(a.match_date).getTime() : Infinity;
+      const db = b.match_date ? new Date(b.match_date).getTime() : Infinity;
+      return da - db;
+    });
 }
 
-function renderEntrySelector() {
+// Fill the jornada dropdown; default to the newest jornada if none chosen.
+function renderJornadaSelect() {
+  const sel = document.getElementById("jornada-select");
+  if (!sel) return;
+  if (allJornadas.length === 0) {
+    sel.innerHTML = '<option value="">No hay jornadas todavía</option>';
+    currentJornadaId = null;
+    entrySelector.classList.add("hidden");
+    return;
+  }
+  sel.innerHTML = allJornadas.map(j =>
+    `<option value="${j.id}">Jornada ${j.number} — ${trim(j.season)}</option>`
+  ).join("");
+  if (!currentJornadaId || !allJornadas.some(j => j.id === currentJornadaId)) {
+    currentJornadaId = allJornadas[0].id;
+  }
+  sel.value = String(currentJornadaId);
+}
+
+// Build the user's quinielas (pick-sets) for the CURRENT jornada only.
+function initQuinielas() {
+  if (!currentJornadaId) { userQuinielas = [{ number:1, predictions:new Map() }]; currentQuinielaIndex = 0; pendingPicks = new Map(); return; }
+  const jornadaMatchIds = new Set(currentJornadaMatches().map(m => m.id));
+  const myPreds = allPredictions.filter(p => p.user_id === currentUser.id && jornadaMatchIds.has(p.match_id));
+  const nums = [...new Set(myPreds.map(p => p.entry_number || 1))].sort((a,b)=>a-b);
+  userQuinielas = nums.map(n => ({
+    number: n,
+    predictions: new Map(myPreds.filter(p => (p.entry_number||1) === n).map(p => [p.match_id, p.pick]))
+  }));
+  if (userQuinielas.length === 0) userQuinielas = [{ number:1, predictions:new Map() }];
+  currentQuinielaIndex = 0;
+  pendingPicks = new Map(userQuinielas[0].predictions);
+}
+
+// Draw the "Quiniela 1 / Quiniela 2 / + Nueva" tabs for the current jornada.
+function renderQuinielaSelector() {
+  if (!currentJornadaId) { entrySelector.classList.add("hidden"); return; }
   entryTabs.innerHTML = "";
-  userEntries.forEach((entry, i) => {
+  userQuinielas.forEach((q, i) => {
     const btn = document.createElement("button");
-    btn.className = `entry-tab${i === currentEntryIndex ? " active" : ""}`;
-    btn.textContent = entry.label;
+    btn.className = `entry-tab${i === currentQuinielaIndex ? " active" : ""}`;
+    btn.textContent = `Quiniela ${q.number}`;
     btn.addEventListener("click", () => {
-      userEntries[currentEntryIndex].predictions = new Map(pendingPicks);
-      currentEntryIndex = i;
-      pendingPicks = new Map(userEntries[i].predictions);
-      renderEntrySelector();
+      userQuinielas[currentQuinielaIndex].predictions = new Map(pendingPicks);
+      currentQuinielaIndex = i;
+      pendingPicks = new Map(userQuinielas[i].predictions);
+      renderQuinielaSelector();
       renderMatches();
     });
     entryTabs.appendChild(btn);
   });
-  entryInfo.textContent = `${userEntries.length} entr${userEntries.length === 1 ? "y" : "ies"} · $${userEntries.length * ENTRY_FEE} total`;
+  entryInfo.textContent = `${userQuinielas.length} quiniela${userQuinielas.length===1?"":"s"} en esta jornada`;
   entrySelector.classList.remove("hidden");
 }
 
-addEntryBtn.addEventListener("click", () => {
-  userEntries[currentEntryIndex].predictions = new Map(pendingPicks);
-  const newNum = Math.max(...userEntries.map(e => e.number)) + 1;
-  userEntries.push({ number: newNum, label: `Entry ${newNum}`, predictions: new Map() });
-  currentEntryIndex = userEntries.length - 1;
-  pendingPicks = new Map();
-  renderEntrySelector();
+// Changing the jornada reloads its matches and the user's quinielas for it.
+document.getElementById("jornada-select").addEventListener("change", (e) => {
+  currentJornadaId = e.target.value ? parseInt(e.target.value) : null;
+  initQuinielas();
+  renderQuinielaSelector();
   renderMatches();
-  showToast(`Entry ${newNum} added! Make your picks ⚽`);
+});
+
+// Add a new quiniela for the current jornada.
+addEntryBtn.addEventListener("click", () => {
+  if (!currentJornadaId) { showToast("Elige una jornada primero"); return; }
+  userQuinielas[currentQuinielaIndex].predictions = new Map(pendingPicks);
+  const newNum = Math.max(...userQuinielas.map(q => q.number)) + 1;
+  userQuinielas.push({ number: newNum, predictions: new Map() });
+  currentQuinielaIndex = userQuinielas.length - 1;
+  pendingPicks = new Map();
+  renderQuinielaSelector();
+  renderMatches();
+  showToast(`Quiniela ${newNum} añadida — haz tus picks ⚽`);
 });
 
 submitAllBtn.addEventListener("click", async () => {
-  userEntries[currentEntryIndex].predictions = new Map(pendingPicks);
-  const totalPicks = userEntries.reduce((sum, e) => sum + e.predictions.size, 0);
-  if (totalPicks === 0) { showToast("Make some picks first!"); return; }
-  submitAllBtn.textContent = "Saving…"; submitAllBtn.className = "submit-all-btn saving"; submitAllBtn.disabled = true;
+  if (!currentJornadaId) { showToast("Elige una jornada primero"); return; }
+  userQuinielas[currentQuinielaIndex].predictions = new Map(pendingPicks);
+  const totalPicks = userQuinielas.reduce((sum, q) => sum + q.predictions.size, 0);
+  if (totalPicks === 0) { showToast("Haz algunas predicciones primero"); return; }
+  submitAllBtn.textContent = "Guardando…"; submitAllBtn.className = "submit-all-btn saving"; submitAllBtn.disabled = true;
   try {
     const upserts = [];
-    for (const entry of userEntries) {
-      for (const [matchId, pick] of entry.predictions) {
-        upserts.push({ user_id: currentUser.id, match_id: matchId, pick, entry_number: entry.number });
+    for (const q of userQuinielas) {
+      for (const [matchId, pick] of q.predictions) {
+        upserts.push({ user_id: currentUser.id, match_id: matchId, pick, entry_number: q.number });
       }
     }
     if (upserts.length > 0) {
@@ -495,27 +548,29 @@ submitAllBtn.addEventListener("click", async () => {
     }
     const { data } = await sb.from("predictions").select("*").eq("user_id", currentUser.id);
     allPredictions = [...allPredictions.filter(p => p.user_id !== currentUser.id), ...(data || [])];
-    submitAllBtn.textContent = "✓ All Saved!"; submitAllBtn.className = "submit-all-btn done";
-    showToast(`${upserts.length} predictions saved! 🎯`);
-    setTimeout(() => { submitAllBtn.textContent = "⚽ Submit All Predictions"; submitAllBtn.className = "submit-all-btn"; submitAllBtn.disabled = false; }, 3000);
+    submitAllBtn.textContent = "✓ ¡Guardado!"; submitAllBtn.className = "submit-all-btn done";
+    showToast(`${upserts.length} predicciones guardadas 🎯`);
+    setTimeout(() => { submitAllBtn.textContent = "⚽ Enviar Quiniela"; submitAllBtn.className = "submit-all-btn"; submitAllBtn.disabled = false; }, 3000);
   } catch(err) {
-    showToast("Save failed: " + err.message);
-    submitAllBtn.textContent = "⚽ Submit All Predictions"; submitAllBtn.className = "submit-all-btn"; submitAllBtn.disabled = false;
+    showToast("Error al guardar: " + err.message);
+    submitAllBtn.textContent = "⚽ Enviar Quiniela"; submitAllBtn.className = "submit-all-btn"; submitAllBtn.disabled = false;
   }
 });
 
 function renderMatches() {
-  const matches = [...allMatches].sort((a,b) => {
-    const da = a.match_date ? new Date(a.match_date).getTime() : Infinity;
-    const db = b.match_date ? new Date(b.match_date).getTime() : Infinity;
-    return da - db;
-  });
+  if (!currentJornadaId) {
+    matchesBanner.classList.add("hidden");
+    matchList.innerHTML = '<li class="empty">Elige una jornada para empezar.</li>';
+    submitAllBtn.classList.add("hidden");
+    return;
+  }
+  const matches = currentJornadaMatches();
   matchesBanner.classList.add("hidden"); matchList.innerHTML = "";
-  if (matches.length === 0) { matchList.innerHTML = '<li class="empty">No matches yet. Admin can add matches above!</li>'; return; }
+  if (matches.length === 0) { matchList.innerHTML = '<li class="empty">No hay partidos en esta jornada todavía.</li>'; submitAllBtn.classList.add("hidden"); return; }
   let hasAnyPick = pendingPicks.size > 0;
   for (const match of matches) {
     const locked = isLocked(match);
-    const savedPick = userEntries[currentEntryIndex]?.predictions.get(match.id);
+    const savedPick = userQuinielas[currentQuinielaIndex]?.predictions.get(match.id);
     const pendingPick = pendingPicks.get(match.id) ?? null;
     const activePick = pendingPick || savedPick;
     const st = normalizeStatus(match.status);
@@ -537,7 +592,7 @@ function renderMatches() {
         <div class="team-side"><span class="team-name"><span class="team-flag">${teamIcon(match.away_team)}</span><span class="team-label">${shortTeam(match.away_team)}</span></span></div>
       </div>
       <div class="prediction-section">
-        <div class="prediction-title">Your prediction${activePick ? ` — ${pickLabel(activePick)}` : ""}</div>
+        <div class="prediction-title">Tu predicción${activePick ? ` — ${pickLabel(activePick)}` : ""}</div>
         <div class="pick-row">
           <button type="button" class="pick-btn${activePick==="home" ? (st==="finished"&&outcome ? (outcome==="home"?" correct":" wrong") : " selected") : ""}" data-pick="home" ${locked?"disabled":""}>Local<span>${teamIcon(match.home_team)} ${shortTeam(match.home_team)}</span></button>
           <button type="button" class="pick-btn${activePick==="draw" ? (st==="finished"&&outcome ? (outcome==="draw"?" correct":" wrong") : " selected") : ""}" data-pick="draw" ${locked?"disabled":""}>Empate<span>🤝 Empate</span></button>
@@ -564,22 +619,26 @@ function renderMatches() {
 function computeScores() {
   const matchById = Object.fromEntries(allMatches.map(m => [m.id, m]));
   const profileById = Object.fromEntries(allProfiles.map(p => [p.id, p]));
-  const byEntry = {};
+  const jById = Object.fromEntries(allJornadas.map(j => [j.id, j]));
+  const byQuiniela = {};
   for (const p of allPredictions) {
-    const key = `${p.user_id}_${p.entry_number||1}`;
-    if (!byEntry[key]) byEntry[key] = { userId:p.user_id, entryNum:p.entry_number||1, points:0, correct:0, total:0 };
     const match = matchById[p.match_id];
-    if (!match || normalizeStatus(match.status) !== "finished") continue;
+    if (!match) continue;
+    const jId = match.jornada_id;
+    const key = `${p.user_id}_${jId}_${p.entry_number||1}`;
+    if (!byQuiniela[key]) byQuiniela[key] = { userId:p.user_id, jornadaId:jId, entryNum:p.entry_number||1, points:0, correct:0, total:0 };
+    if (normalizeStatus(match.status) !== "finished") continue;
     const outcome = getOutcome(match);
     if (!outcome) continue;
-    byEntry[key].total += 1;
-    if (p.pick === outcome) { byEntry[key].correct += 1; byEntry[key].points += 1; }
+    byQuiniela[key].total += 1;
+    if (p.pick === outcome) { byQuiniela[key].correct += 1; byQuiniela[key].points += 1; }
   }
-  return Object.values(byEntry).map(e => ({
-    ...e,
-    name: profileById[e.userId]?.display_name || "Player",
-    label: `${profileById[e.userId]?.display_name || "Player"} — Entry ${e.entryNum}`,
-  })).sort((a,b) => b.points - a.points || b.correct - a.correct);
+  return Object.values(byQuiniela).map(e => {
+    const j = jById[e.jornadaId];
+    const jLabel = j ? `J${j.number}` : "J?";
+    const name = profileById[e.userId]?.display_name || "Player";
+    return { ...e, name, label: `${name} — ${jLabel} Quiniela ${e.entryNum}` };
+  }).sort((a,b) => b.points - a.points || b.correct - a.correct);
 }
 
 function renderLeaderboard() {
@@ -784,7 +843,9 @@ async function loadAppData() {
   allProfiles = profilesRes.data||[];
   allJornadas = jornadasRes.data||[];
   await ensureLeagueMembers();
-  initEntries();
+  renderJornadaSelect();
+  initQuinielas();
+  renderQuinielaSelector();
   renderMatches();
 }
 
