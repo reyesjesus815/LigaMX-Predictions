@@ -165,6 +165,12 @@
     .add-btn { padding: 0.75rem; border-radius: 10px; border: none; background: linear-gradient(135deg, var(--green), #00a844); color: #0a0f0a; font-family: inherit; font-size: 0.9rem; font-weight: 700; cursor: pointer; }
     .admin-warn { background: rgba(0,200,83,0.08); border: 1px solid rgba(0,200,83,0.25); border-radius: 10px; padding: 0.85rem 1rem; font-size: 0.82rem; color: var(--green); margin-bottom: 1rem; }
 
+    /* WINNER BANNER */
+    .winner-banner { background: linear-gradient(135deg, var(--gold-dim), var(--surface)); border: 1px solid var(--gold); border-radius: var(--radius); padding: 1.1rem 1rem; margin-bottom: 1rem; text-align: center; }
+    .winner-banner .wb-title { font-size: 0.68rem; font-weight: 800; text-transform: uppercase; letter-spacing: 0.12em; color: var(--gold); }
+    .winner-banner .wb-name { font-size: 1.35rem; font-weight: 800; margin-top: 0.2rem; }
+    .winner-banner .wb-sub { font-size: 0.75rem; color: var(--muted); margin-top: 0.15rem; }
+
     /* NAV */
     .bottom-nav { position: fixed; bottom: 0; left: 0; right: 0; height: calc(var(--nav-h) + var(--safe-b)); padding-bottom: var(--safe-b); background: rgba(10,15,10,0.96); backdrop-filter: blur(16px); border-top: 1px solid var(--border); display: flex; z-index: 20; }
     .nav-item { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 0.2rem; border: none; background: none; color: var(--muted); font-family: inherit; font-size: 0.62rem; font-weight: 600; cursor: pointer; transition: color 0.15s; }
@@ -210,6 +216,7 @@
   <section id="page-matches" class="page">
     <h2 class="page-title">Quinielas</h2>
     <p class="page-desc">Elige una jornada y haz tus predicciones.</p>
+    <div id="winner-banner" class="winner-banner hidden"></div>
     <div class="entry-selector" id="jornada-selector">
       <div class="entry-selector-title">🗓️ Jornada</div>
       <select class="form-input" id="jornada-select"></select>
@@ -288,6 +295,17 @@
       <div class="admin-card-title">📝 Update Scores & Remove Matches</div>
       <div id="admin-match-list"></div>
     </div>
+    <div class="admin-card">
+      <div class="admin-card-title">🏆 Publicar Ganador</div>
+      <div class="add-match-form">
+        <div class="form-row">
+          <select class="form-input" id="winner-jornada"></select>
+          <select class="form-input" id="winner-player"></select>
+        </div>
+        <button class="add-btn" id="post-winner-btn">Publicar Ganador</button>
+      </div>
+      <div id="winner-list" style="margin-top:0.85rem;"></div>
+    </div>
   </section>
 
   <nav class="bottom-nav" aria-label="Main">
@@ -319,7 +337,7 @@ const ADMIN_EMAILS = ["reyes.jesus815@gmail.com"]; // add your partner's email h
 const ENTRY_FEE = 5;
 
 let sb = null, currentUser = null, isSignUp = false;
-let allMatches = [], allPredictions = [], allProfiles = [], leagueMembers = [], allJornadas = [];
+let allMatches = [], allPredictions = [], allProfiles = [], leagueMembers = [], allJornadas = [], allWinners = [];
 let currentJornadaId = null;
 let userQuinielas = [];
 let currentQuinielaIndex = 0;
@@ -701,6 +719,7 @@ function renderPot() {
 function renderAdmin() {
   if (!isAdmin()) return;
   renderJornadaControls();
+  renderWinnerAdmin();
   const container = document.getElementById("admin-match-list");
   container.innerHTML = "";
   const matches = [...allMatches].sort((a,b) => {
@@ -818,6 +837,87 @@ document.getElementById("add-match-btn").addEventListener("click", async () => {
   renderJornadaControls(); renderAdmin(); renderMatches();
 });
 
+// ---- WINNERS ----
+
+// Show the most recently posted winner as a gold banner on the main page.
+function renderWinnerBanner() {
+  const banner = document.getElementById("winner-banner");
+  if (!banner) return;
+  if (!allWinners || allWinners.length === 0) { banner.classList.add("hidden"); return; }
+  const profileById = Object.fromEntries(allProfiles.map(p => [p.id, p]));
+  const jById = Object.fromEntries(allJornadas.map(j => [j.id, j]));
+  const w = allWinners[0]; // most recent (ordered newest first)
+  const name = profileById[w.user_id]?.display_name || "Ganador";
+  const j = jById[w.jornada_id];
+  const jLabel = j ? `Jornada ${j.number}` : "";
+  banner.innerHTML = `
+    <div class="wb-title">🏆 Ganador ${jLabel}</div>
+    <div class="wb-name">${name}</div>
+    <div class="wb-sub">¡Felicidades!</div>`;
+  banner.classList.remove("hidden");
+}
+
+// Admin controls: fill the jornada + player dropdowns and list posted winners.
+function renderWinnerAdmin() {
+  const jSel = document.getElementById("winner-jornada");
+  const pSel = document.getElementById("winner-player");
+  if (jSel) {
+    jSel.innerHTML = allJornadas.length
+      ? allJornadas.map(j => `<option value="${j.id}">Jornada ${j.number} — ${trim(j.season)}</option>`).join("")
+      : '<option value="">Crea una jornada primero</option>';
+  }
+  if (pSel) {
+    const players = [...allProfiles].sort((a,b) => (a.display_name||"").localeCompare(b.display_name||""));
+    pSel.innerHTML = players.length
+      ? players.map(p => `<option value="${p.id}">${p.display_name || "Player"}</option>`).join("")
+      : '<option value="">No hay jugadores</option>';
+  }
+  const list = document.getElementById("winner-list");
+  if (!list) return;
+  if (!allWinners || allWinners.length === 0) {
+    list.innerHTML = '<p style="font-size:0.78rem;color:var(--muted);">No hay ganadores publicados.</p>';
+    return;
+  }
+  const profileById = Object.fromEntries(allProfiles.map(p => [p.id, p]));
+  const jById = Object.fromEntries(allJornadas.map(j => [j.id, j]));
+  list.innerHTML = "";
+  allWinners.forEach(w => {
+    const name = profileById[w.user_id]?.display_name || "Ganador";
+    const j = jById[w.jornada_id];
+    const jLabel = j ? `Jornada ${j.number}` : "Jornada ?";
+    const row = document.createElement("div");
+    row.style = "display:flex;justify-content:space-between;align-items:center;gap:0.5rem;padding:0.4rem 0;border-top:1px solid var(--border);font-size:0.82rem;";
+    row.innerHTML = `<span><strong style="color:var(--gold);">🏆 ${jLabel}</strong> · ${name}</span>`;
+    const del = document.createElement("button");
+    del.className = "delete-btn";
+    del.textContent = "🗑";
+    del.addEventListener("click", async () => {
+      if (!confirm(`¿Borrar ganador de ${jLabel}?`)) return;
+      const { error } = await sb.from("winners").delete().eq("id", w.id);
+      if (error) { showToast("No se pudo borrar"); return; }
+      allWinners = allWinners.filter(x => x.id !== w.id);
+      showToast("Ganador borrado");
+      renderWinnerAdmin(); renderWinnerBanner();
+    });
+    row.appendChild(del);
+    list.appendChild(row);
+  });
+}
+
+// Post a winner (admin only — the database also enforces admin-only).
+document.getElementById("post-winner-btn").addEventListener("click", async () => {
+  const jornadaId = document.getElementById("winner-jornada").value;
+  const userId = document.getElementById("winner-player").value;
+  if (!jornadaId || !userId) { showToast("Elige jornada y jugador"); return; }
+  const { data, error } = await sb.from("winners")
+    .insert({ jornada_id: parseInt(jornadaId), user_id: userId })
+    .select().single();
+  if (error) { showToast("Error: " + error.message); return; }
+  allWinners.unshift(data);
+  showToast("¡Ganador publicado! 🏆");
+  renderWinnerAdmin(); renderWinnerBanner();
+});
+
 async function ensureLeagueMembers() {
   const { data } = await sb.from("league_members").select("*");
   leagueMembers = data || [];
@@ -831,22 +931,25 @@ async function ensureLeagueMembers() {
 
 async function loadAppData() {
   matchList.innerHTML = '<li class="empty">Loading matches…</li>';
-  const [matchesRes, predsRes, profilesRes, jornadasRes] = await Promise.all([
+  const [matchesRes, predsRes, profilesRes, jornadasRes, winnersRes] = await Promise.all([
     sb.from("matches").select("*").order("match_date",{ascending:true}),
     sb.from("predictions").select("*"),
     sb.from("profiles").select("*"),
     sb.from("jornadas").select("*").order("number",{ascending:false}),
+    sb.from("winners").select("*").order("posted_at",{ascending:false}),
   ]);
   if (matchesRes.error) { matchList.innerHTML=`<li class="empty">${matchesRes.error.message}</li>`; return; }
   allMatches = matchesRes.data||[];
   allPredictions = predsRes.data||[];
   allProfiles = profilesRes.data||[];
   allJornadas = jornadasRes.data||[];
+  allWinners = winnersRes.data||[];
   await ensureLeagueMembers();
   renderJornadaSelect();
   initQuinielas();
   renderQuinielaSelector();
   renderMatches();
+  renderWinnerBanner();
 }
 
 function boot() {
