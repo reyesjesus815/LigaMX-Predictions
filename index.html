@@ -171,6 +171,15 @@
     .winner-banner .wb-name { font-size: 1.35rem; font-weight: 800; margin-top: 0.2rem; }
     .winner-banner .wb-sub { font-size: 0.75rem; color: var(--muted); margin-top: 0.15rem; }
 
+    /* ADS */
+    .ad-list { list-style: none; display: flex; flex-direction: column; gap: 0.75rem; }
+    .ad-card { background: var(--bg-card); border: 1px solid var(--border); border-radius: var(--radius); padding: 1rem; }
+    .ad-cat { font-size: 0.65rem; font-weight: 800; text-transform: uppercase; letter-spacing: 0.08em; color: var(--accent); margin-bottom: 0.3rem; }
+    .ad-title { font-size: 1rem; font-weight: 800; }
+    .ad-body { font-size: 0.85rem; color: var(--text); margin-top: 0.3rem; white-space: pre-wrap; }
+    .ad-contact { font-size: 0.8rem; color: var(--green); margin-top: 0.5rem; font-weight: 600; }
+    textarea.form-input { resize: vertical; min-height: 64px; }
+
     /* NAV */
     .bottom-nav { position: fixed; bottom: 0; left: 0; right: 0; height: calc(var(--nav-h) + var(--safe-b)); padding-bottom: var(--safe-b); background: rgba(10,15,10,0.96); backdrop-filter: blur(16px); border-top: 1px solid var(--border); display: flex; z-index: 20; }
     .nav-item { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 0.2rem; border: none; background: none; color: var(--muted); font-family: inherit; font-size: 0.62rem; font-weight: 600; cursor: pointer; transition: color 0.15s; }
@@ -257,6 +266,12 @@
     <p style="font-size:0.75rem;color:var(--muted);margin-top:1rem;text-align:center;">Admin can tap + or − to track entries paid</p>
   </section>
 
+  <section id="page-anuncios" class="page hidden">
+    <h2 class="page-title">📢 Anuncios</h2>
+    <p class="page-desc">Empleos, vehículos y anuncios de la comunidad.</p>
+    <ul id="anuncios-list" class="ad-list"></ul>
+  </section>
+
   <section id="page-admin" class="page hidden">
     <h2 class="page-title">⚙️ Admin Panel</h2>
     <p class="page-desc">Add/remove matches and update scores.</p>
@@ -306,6 +321,23 @@
       </div>
       <div id="winner-list" style="margin-top:0.85rem;"></div>
     </div>
+    <div class="admin-card">
+      <div class="admin-card-title">📢 Publicar Anuncio</div>
+      <div class="add-match-form">
+        <div class="form-row">
+          <select class="form-input" id="new-ad-category">
+            <option value="anuncio">📢 Anuncio</option>
+            <option value="empleo">💼 Empleo</option>
+            <option value="vehiculo">🚗 Vehículo</option>
+          </select>
+          <input class="form-input" id="new-ad-contact" placeholder="Contacto (tel/WhatsApp)" />
+        </div>
+        <input class="form-input" id="new-ad-title" placeholder="Título" />
+        <textarea class="form-input" id="new-ad-body" placeholder="Descripción" rows="3"></textarea>
+        <button class="add-btn" id="post-ad-btn">Publicar Anuncio</button>
+      </div>
+      <div id="ad-admin-list" style="margin-top:0.85rem;"></div>
+    </div>
   </section>
 
   <nav class="bottom-nav" aria-label="Main">
@@ -320,6 +352,10 @@
     <button type="button" class="nav-item" data-page="pot">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 3"/></svg>
       Pot
+    </button>
+    <button type="button" class="nav-item" data-page="anuncios">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 11l15-5v12L3 13z"/><path d="M11.6 16.8a3 3 0 1 1-5.8-1.6"/></svg>
+      Anuncios
     </button>
     <button type="button" class="nav-item admin-nav hidden" data-page="admin" id="admin-nav-btn">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/></svg>
@@ -337,7 +373,7 @@ const ADMIN_EMAILS = ["reyes.jesus815@gmail.com"]; // add your partner's email h
 const ENTRY_FEE = 5;
 
 let sb = null, currentUser = null, isSignUp = false;
-let allMatches = [], allPredictions = [], allProfiles = [], leagueMembers = [], allJornadas = [], allWinners = [];
+let allMatches = [], allPredictions = [], allProfiles = [], leagueMembers = [], allJornadas = [], allWinners = [], allAds = [];
 let currentJornadaId = null;
 let userQuinielas = [];
 let currentQuinielaIndex = 0;
@@ -448,7 +484,7 @@ async function handleAuthSubmit(e) {
 authForm.addEventListener("submit", handleAuthSubmit);
 document.getElementById("btn-signout").addEventListener("click", async () => { if (sb) await sb.auth.signOut(); showAuth(); });
 
-const pages = ["matches","leaderboard","pot","admin"];
+const pages = ["matches","leaderboard","pot","anuncios","admin"];
 document.querySelectorAll(".nav-item").forEach(btn => {
   btn.addEventListener("click", () => {
     const page = btn.dataset.page;
@@ -456,6 +492,7 @@ document.querySelectorAll(".nav-item").forEach(btn => {
     pages.forEach(p => { const el = document.getElementById(`page-${p}`); if(el) el.classList.toggle("hidden", p !== page); });
     if (page === "leaderboard") renderLeaderboard();
     if (page === "pot") renderPot();
+    if (page === "anuncios") renderAnuncios();
     if (page === "admin") renderAdmin();
   });
 });
@@ -720,6 +757,7 @@ function renderAdmin() {
   if (!isAdmin()) return;
   renderJornadaControls();
   renderWinnerAdmin();
+  renderAdsAdmin();
   const container = document.getElementById("admin-match-list");
   container.innerHTML = "";
   const matches = [...allMatches].sort((a,b) => {
@@ -918,6 +956,91 @@ document.getElementById("post-winner-btn").addEventListener("click", async () =>
   renderWinnerAdmin(); renderWinnerBanner();
 });
 
+// ---- ANUNCIOS (ADS) ----
+
+// Escape user/admin text so it can't break the page layout.
+function escapeHtml(s){ return (s||"").replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+
+// Category label with emoji.
+function adCatLabel(cat){ return { empleo:"💼 Empleo", vehiculo:"🚗 Vehículo", anuncio:"📢 Anuncio" }[cat] || "📢 Anuncio"; }
+
+// Public Anuncios page: active ads, newest first.
+function renderAnuncios() {
+  const container = document.getElementById("anuncios-list");
+  if (!container) return;
+  const active = allAds.filter(a => a.is_active)
+    .sort((a,b) => (b.created_at||"").localeCompare(a.created_at||""));
+  if (active.length === 0) { container.innerHTML = '<li class="empty">No hay anuncios por ahora.</li>'; return; }
+  container.innerHTML = "";
+  active.forEach(ad => {
+    const li = document.createElement("li");
+    li.className = "ad-card";
+    li.innerHTML = `
+      <div class="ad-cat">${adCatLabel(ad.category)}</div>
+      <div class="ad-title">${escapeHtml(ad.title)}</div>
+      ${ad.body ? `<div class="ad-body">${escapeHtml(ad.body)}</div>` : ""}
+      ${ad.contact ? `<div class="ad-contact">📞 ${escapeHtml(ad.contact)}</div>` : ""}`;
+    container.appendChild(li);
+  });
+}
+
+// Admin list of all ads, with hide/show and delete.
+function renderAdsAdmin() {
+  const list = document.getElementById("ad-admin-list");
+  if (!list) return;
+  if (allAds.length === 0) { list.innerHTML = '<p style="font-size:0.78rem;color:var(--muted);">No hay anuncios.</p>'; return; }
+  list.innerHTML = "";
+  [...allAds].sort((a,b)=>(b.created_at||"").localeCompare(a.created_at||"")).forEach(ad => {
+    const row = document.createElement("div");
+    row.style = "display:flex;justify-content:space-between;align-items:center;gap:0.5rem;padding:0.45rem 0;border-top:1px solid var(--border);font-size:0.82rem;";
+    row.innerHTML = `<span>${adCatLabel(ad.category)} · <strong>${escapeHtml(ad.title)}</strong>${ad.is_active?"":' <span style="color:var(--muted)">(oculto)</span>'}</span>`;
+    const btns = document.createElement("div");
+    btns.style = "display:flex;gap:0.35rem;flex-shrink:0;";
+    const toggle = document.createElement("button");
+    toggle.className = "save-btn";
+    toggle.textContent = ad.is_active ? "Ocultar" : "Mostrar";
+    toggle.addEventListener("click", async () => {
+      const { error } = await sb.from("ads").update({ is_active: !ad.is_active }).eq("id", ad.id);
+      if (error) { showToast("No se pudo actualizar"); return; }
+      ad.is_active = !ad.is_active;
+      renderAdsAdmin(); renderAnuncios();
+    });
+    const del = document.createElement("button");
+    del.className = "delete-btn";
+    del.textContent = "🗑";
+    del.addEventListener("click", async () => {
+      if (!confirm(`¿Borrar "${ad.title}"?`)) return;
+      const { error } = await sb.from("ads").delete().eq("id", ad.id);
+      if (error) { showToast("No se pudo borrar"); return; }
+      allAds = allAds.filter(x => x.id !== ad.id);
+      showToast("Anuncio borrado");
+      renderAdsAdmin(); renderAnuncios();
+    });
+    btns.appendChild(toggle); btns.appendChild(del);
+    row.appendChild(btns);
+    list.appendChild(row);
+  });
+}
+
+// Post a new ad (admin only — the database also enforces admin-only).
+document.getElementById("post-ad-btn").addEventListener("click", async () => {
+  const category = document.getElementById("new-ad-category").value;
+  const title = document.getElementById("new-ad-title").value.trim();
+  const body = document.getElementById("new-ad-body").value.trim();
+  const contact = document.getElementById("new-ad-contact").value.trim();
+  if (!title) { showToast("Pon un título"); return; }
+  const { data, error } = await sb.from("ads")
+    .insert({ category, title, body: body||null, contact: contact||null, is_active: true })
+    .select().single();
+  if (error) { showToast("Error: " + error.message); return; }
+  allAds.unshift(data);
+  document.getElementById("new-ad-title").value = "";
+  document.getElementById("new-ad-body").value = "";
+  document.getElementById("new-ad-contact").value = "";
+  showToast("¡Anuncio publicado! 📢");
+  renderAdsAdmin(); renderAnuncios();
+});
+
 async function ensureLeagueMembers() {
   const { data } = await sb.from("league_members").select("*");
   leagueMembers = data || [];
@@ -931,12 +1054,13 @@ async function ensureLeagueMembers() {
 
 async function loadAppData() {
   matchList.innerHTML = '<li class="empty">Loading matches…</li>';
-  const [matchesRes, predsRes, profilesRes, jornadasRes, winnersRes] = await Promise.all([
+  const [matchesRes, predsRes, profilesRes, jornadasRes, winnersRes, adsRes] = await Promise.all([
     sb.from("matches").select("*").order("match_date",{ascending:true}),
     sb.from("predictions").select("*"),
     sb.from("profiles").select("*"),
     sb.from("jornadas").select("*").order("number",{ascending:false}),
     sb.from("winners").select("*").order("posted_at",{ascending:false}),
+    sb.from("ads").select("*").order("created_at",{ascending:false}),
   ]);
   if (matchesRes.error) { matchList.innerHTML=`<li class="empty">${matchesRes.error.message}</li>`; return; }
   allMatches = matchesRes.data||[];
@@ -944,6 +1068,7 @@ async function loadAppData() {
   allProfiles = profilesRes.data||[];
   allJornadas = jornadasRes.data||[];
   allWinners = winnersRes.data||[];
+  allAds = adsRes.data||[];
   await ensureLeagueMembers();
   renderJornadaSelect();
   initQuinielas();
