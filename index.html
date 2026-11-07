@@ -338,6 +338,14 @@
       </div>
       <div id="ad-admin-list" style="margin-top:0.85rem;"></div>
     </div>
+    <div class="admin-card">
+      <div class="admin-card-title">📥 Descargar Quinielas (CSV)</div>
+      <div class="add-match-form">
+        <select class="form-input" id="export-jornada"></select>
+        <button class="add-btn" id="export-csv-btn">Descargar CSV</button>
+      </div>
+      <p style="font-size:0.75rem;color:var(--muted);margin-top:0.5rem;">Descarga las quinielas de la jornada para importar a Google Sheets.</p>
+    </div>
   </section>
 
   <nav class="bottom-nav" aria-label="Main">
@@ -770,6 +778,7 @@ function renderAdmin() {
   renderJornadaControls();
   renderWinnerAdmin();
   renderAdsAdmin();
+  renderExportControls();
   const container = document.getElementById("admin-match-list");
   container.innerHTML = "";
   const matches = [...allMatches].sort((a,b) => {
@@ -1057,6 +1066,85 @@ document.getElementById("post-ad-btn").addEventListener("click", async () => {
   document.getElementById("new-ad-contact").value = "";
   showToast("¡Anuncio publicado! 📢");
   renderAdsAdmin(); renderAnuncios();
+});
+
+// ---- CSV EXPORT (in-app download) ----
+
+// Fill the jornada dropdown in the export card.
+function renderExportControls() {
+  const sel = document.getElementById("export-jornada");
+  if (!sel) return;
+  sel.innerHTML = allJornadas.length
+    ? allJornadas.map(j => `<option value="${j.id}">Jornada ${j.number} — ${trim(j.season)}</option>`).join("")
+    : '<option value="">Crea una jornada</option>';
+}
+
+// Wrap a value for safe CSV (quote if it has commas/quotes/newlines).
+function csvEscape(v){ v = String(v==null?"":v); return /[",\n]/.test(v) ? '"'+v.replace(/"/g,'""')+'"' : v; }
+
+// Build the grid rows for one jornada: Jugador, Quiniela, each game (L/E/V), Puntos.
+function buildJornadaCsv(jid) {
+  const PICK = { home:"L", draw:"E", away:"V" };
+  const games = allMatches.filter(m => m.jornada_id === jid).sort((a,b) => {
+    const da = a.match_date || "", db = b.match_date || "";
+    return da < db ? -1 : da > db ? 1 : a.id - b.id;
+  });
+  const gameIds = games.map(g => g.id);
+  const gById = Object.fromEntries(games.map(g => [g.id, g]));
+  const nameById = Object.fromEntries(allProfiles.map(p => [p.id, p.display_name || "Jugador"]));
+  const result = m => (m.home_score==null||m.away_score==null) ? null
+    : (m.home_score>m.away_score ? "home" : m.home_score<m.away_score ? "away" : "draw");
+
+  // group predictions into quinielas: (user_id, entry_number)
+  const quinielas = {};
+  allPredictions.forEach(p => {
+    if (gameIds.includes(p.match_id)) {
+      const k = p.user_id + "|" + (p.entry_number || 1);
+      (quinielas[k] = quinielas[k] || {})[p.match_id] = p.pick;
+    }
+  });
+
+  const header = ["Jugador", "Quiniela", ...games.map(g => `${g.home_team} vs ${g.away_team}`), "Puntos"];
+  const body = [];
+  Object.entries(quinielas).forEach(([k, picks]) => {
+    const [uid, entry] = k.split("|");
+    const row = [nameById[uid] || "Jugador", entry];
+    let pts = 0;
+    gameIds.forEach(gid => {
+      const pk = picks[gid];
+      row.push(PICK[pk] || "");
+      const res = result(gById[gid]);
+      if (res && pk === res) pts++;
+    });
+    row.push(pts);
+    body.push(row);
+  });
+  body.sort((a,b) => {
+    const an = (""+a[0]).toLowerCase(), bn = (""+b[0]).toLowerCase();
+    return an < bn ? -1 : an > bn ? 1 : a[1] - b[1];
+  });
+  return [header, ...body];
+}
+
+// Generate and download the CSV for the chosen jornada.
+function downloadJornadaCsv(jid) {
+  const j = allJornadas.find(x => x.id === jid);
+  const rows = buildJornadaCsv(jid);
+  const csv = rows.map(r => r.map(csvEscape).join(",")).join("\n");
+  const blob = new Blob(["﻿" + csv], { type: "text/csv;charset=utf-8;" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = `jornada_${j ? j.number : "x"}.csv`;
+  document.body.appendChild(a); a.click(); document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+}
+
+document.getElementById("export-csv-btn").addEventListener("click", () => {
+  const jid = parseInt(document.getElementById("export-jornada").value);
+  if (!jid) { showToast("Elige una jornada"); return; }
+  downloadJornadaCsv(jid);
+  showToast("CSV descargado 📥");
 });
 
 async function ensureLeagueMembers() {
