@@ -244,8 +244,8 @@
   </section>
 
   <section id="page-leaderboard" class="page hidden">
-    <h2 class="page-title">Leaderboard</h2>
-    <p class="page-desc">1 point per correct result.</p>
+    <h2 class="page-title">Tus Resultados</h2>
+    <p class="page-desc">Tus quinielas y aciertos por jornada. Los resultados completos se publican aparte.</p>
     <ul id="lb-list" class="lb-list"></ul>
   </section>
 
@@ -347,7 +347,7 @@
     </button>
     <button type="button" class="nav-item" data-page="leaderboard">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M8 21V10M12 21V3M16 21v-6"/></svg>
-      Standings
+      Resultados
     </button>
     <button type="button" class="nav-item" data-page="pot">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 3"/></svg>
@@ -699,12 +699,12 @@ function computeScores() {
 function renderLeaderboard() {
   const rows = computeScores();
   lbList.innerHTML = "";
-  if (rows.length === 0) { lbList.innerHTML = '<li class="empty">No scored predictions yet.</li>'; return; }
+  if (rows.length === 0) { lbList.innerHTML = '<li class="empty">Aún no hay resultados.</li>'; return; }
   rows.forEach((row, i) => {
     const li = document.createElement("li");
     const isYou = row.userId === currentUser?.id;
     li.className = "lb-row" + (isYou ? " you" : "");
-    li.innerHTML = `<div class="lb-rank">${i+1}</div><div class="lb-info"><div class="lb-name">${row.label}${isYou?" (you)":""}</div><div class="lb-stats">${row.correct} correct · ${row.total} decided</div></div><div class="lb-points">${row.points}</div>`;
+    li.innerHTML = `<div class="lb-rank">${i+1}</div><div class="lb-info"><div class="lb-name">${row.label}</div><div class="lb-stats">${row.correct} aciertos · ${row.total} decididos</div></div><div class="lb-points">${row.points}</div>`;
     lbList.appendChild(li);
   });
 }
