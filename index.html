@@ -340,6 +340,11 @@
       <div id="ad-admin-list" style="margin-top:0.85rem;"></div>
     </div>
     <div class="admin-card">
+      <div class="admin-card-title">💵 Pagos</div>
+      <select class="form-input" id="pagos-jornada"></select>
+      <div id="pagos-list" style="margin-top:0.85rem;"></div>
+    </div>
+    <div class="admin-card">
       <div class="admin-card-title">📥 Descargar Quinielas (CSV)</div>
       <div class="add-match-form">
         <select class="form-input" id="export-jornada"></select>
@@ -793,6 +798,7 @@ function renderAdmin() {
   renderWinnerAdmin();
   renderAdsAdmin();
   renderExportControls();
+  renderPagos();
   const container = document.getElementById("admin-match-list");
   container.innerHTML = "";
   const matches = [...allMatches].sort((a,b) => {
@@ -1114,19 +1120,20 @@ function buildJornadaCsv(jid) {
   allPredictions.forEach(p => {
     if (gameIds.includes(p.match_id)) {
       const k = p.user_id + "|" + (p.entry_number || 1);
-      if (!quinielas[k]) quinielas[k] = { picks:{}, name:"" };
+      if (!quinielas[k]) quinielas[k] = { picks:{}, name:"", paid:true };
       quinielas[k].picks[p.match_id] = p.pick;
       if (p.quiniela_name) quinielas[k].name = p.quiniela_name;
+      if (!p.paid) quinielas[k].paid = false;
     }
   });
 
-  const header = ["Nombre", "Cuenta", "Quiniela", ...games.map(g => `${g.home_team} vs ${g.away_team}`), "Puntos"];
+  const header = ["Nombre", "Cuenta", "Quiniela", "Pagado", ...games.map(g => `${g.home_team} vs ${g.away_team}`), "Puntos"];
   const body = [];
   Object.entries(quinielas).forEach(([k, q]) => {
     const [uid, entry] = k.split("|");
     const account = nameById[uid] || "Jugador";
     const nombre = q.name || account;
-    const row = [nombre, account, entry];
+    const row = [nombre, account, entry, q.paid ? "Sí" : "No"];
     let pts = 0;
     gameIds.forEach(gid => {
       const pk = q.picks[gid];
@@ -1164,6 +1171,70 @@ document.getElementById("export-csv-btn").addEventListener("click", () => {
   downloadJornadaCsv(jid);
   showToast("CSV descargado 📥");
 });
+
+// ---- PAGOS (payment tracking) ----
+
+// Group a jornada's predictions into quinielas, with a paid status for each.
+function quinielasForJornada(jid) {
+  const matchIds = new Set(allMatches.filter(m => m.jornada_id === jid).map(m => m.id));
+  const groups = {};
+  allPredictions.forEach(p => {
+    if (matchIds.has(p.match_id)) {
+      const k = p.user_id + "|" + (p.entry_number || 1);
+      if (!groups[k]) groups[k] = { uid:p.user_id, entry:(p.entry_number||1), name:"", paid:true };
+      if (p.quiniela_name) groups[k].name = p.quiniela_name;
+      if (!p.paid) groups[k].paid = false; // paid only if every pick is marked paid
+    }
+  });
+  return Object.values(groups).sort((a,b) => {
+    const an = (a.name || "").toLowerCase(), bn = (b.name || "").toLowerCase();
+    return an < bn ? -1 : an > bn ? 1 : a.entry - b.entry;
+  });
+}
+
+function renderPagos() {
+  const sel = document.getElementById("pagos-jornada");
+  if (!sel) return;
+  const prev = sel.value;
+  sel.innerHTML = allJornadas.length
+    ? allJornadas.map(j => `<option value="${j.id}">Jornada ${j.number} — ${trim(j.season)}</option>`).join("")
+    : '<option value="">Crea una jornada</option>';
+  if (prev && allJornadas.some(j => String(j.id) === prev)) sel.value = prev;
+  const jid = sel.value ? parseInt(sel.value) : null;
+  const list = document.getElementById("pagos-list");
+  if (!list) return;
+  if (!jid) { list.innerHTML = '<p style="font-size:0.78rem;color:var(--muted);">Sin jornada.</p>'; return; }
+  const quinielas = quinielasForJornada(jid);
+  if (quinielas.length === 0) { list.innerHTML = '<p style="font-size:0.78rem;color:var(--muted);">No hay quinielas en esta jornada.</p>'; return; }
+  const nameById = Object.fromEntries(allProfiles.map(p => [p.id, p.display_name || "Jugador"]));
+  const paidCount = quinielas.filter(q => q.paid).length;
+  list.innerHTML = `<p style="font-size:0.75rem;color:var(--muted);margin-bottom:0.5rem;">${paidCount} de ${quinielas.length} pagadas</p>`;
+  quinielas.forEach(q => {
+    const who = q.name || nameById[q.uid] || "Jugador";
+    const row = document.createElement("div");
+    row.style = "display:flex;justify-content:space-between;align-items:center;gap:0.5rem;padding:0.45rem 0;border-top:1px solid var(--border);font-size:0.82rem;";
+    row.innerHTML = `<span><strong>${escapeHtml(who)}</strong> · ${escapeHtml(nameById[q.uid]||"")} · Q${q.entry}</span>`;
+    const btn = document.createElement("button");
+    btn.className = q.paid ? "paid-pill paid" : "paid-pill unpaid";
+    btn.textContent = q.paid ? "Pagado ✓" : "No pagado";
+    btn.addEventListener("click", async () => {
+      const mIds = allMatches.filter(m => m.jornada_id === jid).map(m => m.id);
+      const newPaid = !q.paid;
+      const { error } = await sb.from("predictions").update({ paid: newPaid })
+        .eq("user_id", q.uid).eq("entry_number", q.entry).in("match_id", mIds);
+      if (error) { showToast("No se pudo actualizar"); return; }
+      allPredictions.forEach(p => {
+        if (p.user_id === q.uid && (p.entry_number||1) === q.entry && mIds.includes(p.match_id)) p.paid = newPaid;
+      });
+      showToast(newPaid ? "Marcado pagado ✓" : "Marcado no pagado");
+      renderPagos();
+    });
+    row.appendChild(btn);
+    list.appendChild(row);
+  });
+}
+
+document.getElementById("pagos-jornada").addEventListener("change", renderPagos);
 
 async function ensureLeagueMembers() {
   const { data } = await sb.from("league_members").select("*");
