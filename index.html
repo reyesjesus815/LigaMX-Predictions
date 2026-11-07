@@ -235,6 +235,7 @@
       <div class="entry-tabs" id="entry-tabs"></div>
       <button class="add-entry-btn" id="add-entry-btn">+ Nueva Quiniela</button>
       <div class="entry-info" id="entry-info"></div>
+      <input class="form-input" id="quiniela-name" placeholder="Nombre de esta quiniela (¿para quién es?)" maxlength="40" style="margin-top:0.6rem;" />
     </div>
     <div id="matches-banner" class="banner hidden"></div>
     <ul id="match-list" class="match-list"></ul>
@@ -543,15 +544,19 @@ function renderJornadaSelect() {
 
 // Build the user's quinielas (pick-sets) for the CURRENT jornada only.
 function initQuinielas() {
-  if (!currentJornadaId) { userQuinielas = [{ number:1, predictions:new Map() }]; currentQuinielaIndex = 0; pendingPicks = new Map(); return; }
+  if (!currentJornadaId) { userQuinielas = [{ number:1, name:"", predictions:new Map() }]; currentQuinielaIndex = 0; pendingPicks = new Map(); return; }
   const jornadaMatchIds = new Set(currentJornadaMatches().map(m => m.id));
   const myPreds = allPredictions.filter(p => p.user_id === currentUser.id && jornadaMatchIds.has(p.match_id));
   const nums = [...new Set(myPreds.map(p => p.entry_number || 1))].sort((a,b)=>a-b);
-  userQuinielas = nums.map(n => ({
-    number: n,
-    predictions: new Map(myPreds.filter(p => (p.entry_number||1) === n).map(p => [p.match_id, p.pick]))
-  }));
-  if (userQuinielas.length === 0) userQuinielas = [{ number:1, predictions:new Map() }];
+  userQuinielas = nums.map(n => {
+    const qp = myPreds.filter(p => (p.entry_number||1) === n);
+    return {
+      number: n,
+      name: qp.find(p => p.quiniela_name)?.quiniela_name || "",
+      predictions: new Map(qp.map(p => [p.match_id, p.pick]))
+    };
+  });
+  if (userQuinielas.length === 0) userQuinielas = [{ number:1, name:"", predictions:new Map() }];
   currentQuinielaIndex = 0;
   pendingPicks = new Map(userQuinielas[0].predictions);
 }
@@ -574,8 +579,15 @@ function renderQuinielaSelector() {
     entryTabs.appendChild(btn);
   });
   entryInfo.textContent = `${userQuinielas.length} quiniela${userQuinielas.length===1?"":"s"} en esta jornada`;
+  const nameInput = document.getElementById("quiniela-name");
+  if (nameInput) nameInput.value = userQuinielas[currentQuinielaIndex]?.name || "";
   entrySelector.classList.remove("hidden");
 }
+
+// Keep the current quiniela's name in sync as the player types.
+document.getElementById("quiniela-name").addEventListener("input", (e) => {
+  if (userQuinielas[currentQuinielaIndex]) userQuinielas[currentQuinielaIndex].name = e.target.value;
+});
 
 // Changing the jornada reloads its matches and the user's quinielas for it.
 document.getElementById("jornada-select").addEventListener("change", (e) => {
@@ -590,7 +602,7 @@ addEntryBtn.addEventListener("click", () => {
   if (!currentJornadaId) { showToast("Elige una jornada primero"); return; }
   userQuinielas[currentQuinielaIndex].predictions = new Map(pendingPicks);
   const newNum = Math.max(...userQuinielas.map(q => q.number)) + 1;
-  userQuinielas.push({ number: newNum, predictions: new Map() });
+  userQuinielas.push({ number: newNum, name: "", predictions: new Map() });
   currentQuinielaIndex = userQuinielas.length - 1;
   pendingPicks = new Map();
   renderQuinielaSelector();
@@ -608,7 +620,7 @@ submitAllBtn.addEventListener("click", async () => {
     const upserts = [];
     for (const q of userQuinielas) {
       for (const [matchId, pick] of q.predictions) {
-        upserts.push({ user_id: currentUser.id, match_id: matchId, pick, entry_number: q.number });
+        upserts.push({ user_id: currentUser.id, match_id: matchId, pick, entry_number: q.number, quiniela_name: (q.name||"").trim() || null });
       }
     }
     if (upserts.length > 0) {
@@ -701,7 +713,8 @@ function computeScores() {
     if (!match) continue;
     const jId = match.jornada_id;
     const key = `${p.user_id}_${jId}_${p.entry_number||1}`;
-    if (!byQuiniela[key]) byQuiniela[key] = { userId:p.user_id, jornadaId:jId, entryNum:p.entry_number||1, points:0, correct:0, total:0 };
+    if (!byQuiniela[key]) byQuiniela[key] = { userId:p.user_id, jornadaId:jId, entryNum:p.entry_number||1, qname:"", points:0, correct:0, total:0 };
+    if (p.quiniela_name) byQuiniela[key].qname = p.quiniela_name;
     if (normalizeStatus(match.status) !== "finished") continue;
     const outcome = getOutcome(match);
     if (!outcome) continue;
@@ -711,8 +724,9 @@ function computeScores() {
   return Object.values(byQuiniela).map(e => {
     const j = jById[e.jornadaId];
     const jLabel = j ? `J${j.number}` : "J?";
-    const name = profileById[e.userId]?.display_name || "Player";
-    return { ...e, name, label: `${name} — ${jLabel} Quiniela ${e.entryNum}` };
+    const account = profileById[e.userId]?.display_name || "Player";
+    const who = e.qname || account;
+    return { ...e, name: who, label: `${who} — ${jLabel} Quiniela ${e.entryNum}` };
   }).sort((a,b) => b.points - a.points || b.correct - a.correct);
 }
 
@@ -1100,18 +1114,22 @@ function buildJornadaCsv(jid) {
   allPredictions.forEach(p => {
     if (gameIds.includes(p.match_id)) {
       const k = p.user_id + "|" + (p.entry_number || 1);
-      (quinielas[k] = quinielas[k] || {})[p.match_id] = p.pick;
+      if (!quinielas[k]) quinielas[k] = { picks:{}, name:"" };
+      quinielas[k].picks[p.match_id] = p.pick;
+      if (p.quiniela_name) quinielas[k].name = p.quiniela_name;
     }
   });
 
-  const header = ["Jugador", "Quiniela", ...games.map(g => `${g.home_team} vs ${g.away_team}`), "Puntos"];
+  const header = ["Nombre", "Cuenta", "Quiniela", ...games.map(g => `${g.home_team} vs ${g.away_team}`), "Puntos"];
   const body = [];
-  Object.entries(quinielas).forEach(([k, picks]) => {
+  Object.entries(quinielas).forEach(([k, q]) => {
     const [uid, entry] = k.split("|");
-    const row = [nameById[uid] || "Jugador", entry];
+    const account = nameById[uid] || "Jugador";
+    const nombre = q.name || account;
+    const row = [nombre, account, entry];
     let pts = 0;
     gameIds.forEach(gid => {
-      const pk = picks[gid];
+      const pk = q.picks[gid];
       row.push(PICK[pk] || "");
       const res = result(gById[gid]);
       if (res && pk === res) pts++;
@@ -1121,7 +1139,7 @@ function buildJornadaCsv(jid) {
   });
   body.sort((a,b) => {
     const an = (""+a[0]).toLowerCase(), bn = (""+b[0]).toLowerCase();
-    return an < bn ? -1 : an > bn ? 1 : a[1] - b[1];
+    return an < bn ? -1 : an > bn ? 1 : a[2] - b[2];
   });
   return [header, ...body];
 }
