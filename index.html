@@ -508,6 +508,12 @@ function currentJornadaMatches() {
     });
 }
 
+// True when the jornada's deadline has passed (picks closed).
+function jornadaClosed(jid) {
+  const j = allJornadas.find(x => x.id === jid);
+  return !!(j && j.deadline && new Date(j.deadline) <= new Date());
+}
+
 // Fill the jornada dropdown; default to the newest jornada if none chosen.
 function renderJornadaSelect() {
   const sel = document.getElementById("jornada-select");
@@ -620,11 +626,16 @@ function renderMatches() {
     return;
   }
   const matches = currentJornadaMatches();
+  const closed = jornadaClosed(currentJornadaId);
   matchesBanner.classList.add("hidden"); matchList.innerHTML = "";
   if (matches.length === 0) { matchList.innerHTML = '<li class="empty">No hay partidos en esta jornada todavía.</li>'; submitAllBtn.classList.add("hidden"); return; }
+  if (closed) {
+    matchesBanner.textContent = "🔒 Jornada cerrada — ya no se aceptan predicciones.";
+    matchesBanner.classList.remove("hidden");
+  }
   let hasAnyPick = pendingPicks.size > 0;
   for (const match of matches) {
-    const locked = isLocked(match);
+    const locked = isLocked(match) || closed;
     const savedPick = userQuinielas[currentQuinielaIndex]?.predictions.get(match.id);
     const pendingPick = pendingPicks.get(match.id) ?? null;
     const activePick = pendingPick || savedPick;
@@ -667,7 +678,8 @@ function renderMatches() {
     });
     matchList.appendChild(li);
   }
-  if (hasAnyPick) submitAllBtn.classList.remove("hidden");
+  if (closed) submitAllBtn.classList.add("hidden");
+  else if (hasAnyPick) submitAllBtn.classList.remove("hidden");
   else submitAllBtn.classList.add("hidden");
 }
 
@@ -884,13 +896,17 @@ function renderWinnerBanner() {
   if (!allWinners || allWinners.length === 0) { banner.classList.add("hidden"); return; }
   const profileById = Object.fromEntries(allProfiles.map(p => [p.id, p]));
   const jById = Object.fromEntries(allJornadas.map(j => [j.id, j]));
-  const w = allWinners[0]; // most recent (ordered newest first)
-  const name = profileById[w.user_id]?.display_name || "Ganador";
-  const j = jById[w.jornada_id];
+  // allWinners is newest-first; show every co-winner of that latest jornada (ties)
+  const latestJornadaId = allWinners[0].jornada_id;
+  const names = allWinners
+    .filter(w => w.jornada_id === latestJornadaId)
+    .map(w => profileById[w.user_id]?.display_name || "Ganador");
+  const j = jById[latestJornadaId];
   const jLabel = j ? `Jornada ${j.number}` : "";
+  const multiple = names.length > 1;
   banner.innerHTML = `
-    <div class="wb-title">🏆 Ganador ${jLabel}</div>
-    <div class="wb-name">${name}</div>
+    <div class="wb-title">🏆 ${multiple ? "Ganadores" : "Ganador"} ${jLabel}</div>
+    <div class="wb-name">${escapeHtml(names.join(", "))}</div>
     <div class="wb-sub">¡Felicidades!</div>`;
   banner.classList.remove("hidden");
 }
@@ -948,9 +964,11 @@ document.getElementById("post-winner-btn").addEventListener("click", async () =>
   const userId = document.getElementById("winner-player").value;
   if (!jornadaId || !userId) { showToast("Elige jornada y jugador"); return; }
   const { data, error } = await sb.from("winners")
-    .insert({ jornada_id: parseInt(jornadaId), user_id: userId })
+    .upsert({ jornada_id: parseInt(jornadaId), user_id: userId }, { onConflict: "jornada_id,user_id" })
     .select().single();
   if (error) { showToast("Error: " + error.message); return; }
+  // replace any existing row for this jornada+player, then add to the front
+  allWinners = allWinners.filter(w => !(w.jornada_id === data.jornada_id && w.user_id === data.user_id));
   allWinners.unshift(data);
   showToast("¡Ganador publicado! 🏆");
   renderWinnerAdmin(); renderWinnerBanner();
