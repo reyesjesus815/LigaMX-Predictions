@@ -199,6 +199,7 @@
 <!-- AUTH -->
 <div id="view-auth">
   <div class="auth-card">
+    <div style="text-align:right;margin-bottom:0.25rem;"><button type="button" class="btn-signout lang-toggle">EN</button></div>
     <div id="auth-boot-error" role="alert"></div>
     <div class="brand-logo" style="width:150px;height:150px;margin:0 auto 1rem;"></div>
     <div class="liga-badge">⚽ Quiniela La Jugada</div>
@@ -225,6 +226,7 @@
         <div class="user" id="user-label"></div>
       </div>
     </div>
+    <button type="button" class="btn-signout lang-toggle" style="margin-right:0.4rem;">EN</button>
     <button type="button" class="btn-signout" id="btn-signout">Sign out</button>
   </header>
 
@@ -1298,5 +1300,117 @@ function boot() {
 if (document.readyState==="loading") document.addEventListener("DOMContentLoaded",boot);
 else boot();
 </script>
+
+<script>
+(function(){
+  // [spanish, english] — core terms "Quiniela"/"Jornada" stay the same in both.
+  const PAIRS = [
+    ["Iniciar sesión","Sign in"],["Crear cuenta","Create account"],
+    ["Predice cada partido. Gánales a tus amigos.","Predict every match. Beat your friends."],
+    ["Regístrate para unirte a la liga.","Sign up to join the league."],
+    ["Registrarse","Sign up"],["Crear una cuenta","Create an account"],
+    ["¿Ya tienes cuenta? Inicia sesión","Already have an account? Sign in"],
+    ["Correo","Email"],["Contraseña","Password"],["Nombre","Display name"],
+    ["Tu nombre en la liga","Your name in the league"],["tu@correo.com","you@email.com"],
+    ["Creando tu cuenta…","Creating your account…"],["Iniciando sesión…","Signing in…"],
+    ["¡Bienvenido!","Welcome!"],["¡Cuenta creada! Inicia sesión.","Account created! Sign in now."],
+    ["¡Sesión iniciada!","Signed in!"],["Escribe correo y contraseña.","Enter email and password."],
+    ["Escribe un nombre.","Enter a display name."],["La app no está lista.","App not ready."],
+    ["Algo salió mal.","Something went wrong."],
+    ["Cerrar sesión","Sign out"],
+    ["Partidos","Matches"],["Resultados","Standings"],["Bote","Pot"],["Anuncios","Anuncios"],["Admin","Admin"],
+    ["Elige una jornada y haz tus predicciones.","Pick a jornada and make your predictions."],
+    ["🗓️ Jornada","🗓️ Jornada"],["No hay jornadas todavía","No jornadas yet"],
+    ["🎟️ Tus Quinielas","🎟️ Your Quinielas"],["+ Nueva Quiniela","+ New Quiniela"],
+    ["Nombre de esta quiniela (¿para quién es?)","Name of this quiniela (who is it for?)"],
+    ["⚽ Enviar Quiniela","⚽ Submit Quiniela"],["Enviar Quiniela","Submit Quiniela"],
+    ["Elige una jornada para empezar.","Pick a jornada to start."],
+    ["No hay partidos en esta jornada todavía.","No matches in this jornada yet."],
+    ["Tu predicción","Your prediction"],["Local","Home"],["Empate","Draw"],["Visitante","Away"],
+    ["🤝 Empate","🤝 Draw"],
+    ["Abierto","Open"],["Cerrado","Locked"],["🔴 En vivo","🔴 Live"],["Final","FT"],
+    ["🔒 Jornada cerrada — ya no se aceptan predicciones.","🔒 Jornada closed — predictions are no longer accepted."],
+    ["Elige una jornada primero","Pick a jornada first"],
+    ["Haz algunas predicciones primero","Make some predictions first"],
+    ["Guardando…","Saving…"],["✓ ¡Guardado!","✓ Saved!"],
+    ["Tus Resultados","Your Results"],
+    ["Tus quinielas y aciertos por jornada. Los resultados completos se publican aparte.","Your quinielas and correct picks by jornada. Full results are posted separately."],
+    ["Aún no hay resultados.","No results yet."],
+    ["📢 Anuncios","📢 Anuncios"],["Empleos, vehículos y anuncios de la comunidad.","Jobs, vehicles and community announcements."],
+    ["No hay anuncios por ahora.","No announcements right now."],
+    ["💼 Empleo","💼 Job"],["🚗 Vehículo","🚗 Vehicle"],["📢 Anuncio","📢 Announcement"],
+    ["⚙️ Admin Panel","⚙️ Admin Panel"],["Add/remove matches and update scores.","Add/remove matches and update scores."],
+    ["🔒 Only visible to admins. Scores update leaderboard automatically.","🔒 Only visible to admins. Scores update standings automatically."],
+    ["🗓️ Create Jornada","🗓️ Create Jornada"],["Number e.g. 15","Number e.g. 15"],
+    ["Season e.g. Clausura 2027","Season e.g. Clausura 2027"],["Create Jornada","Create Jornada"],
+    ["➕ Add New Match","➕ Add New Match"],["Create a jornada first","Create a jornada first"],
+    ["Home team e.g. America","Home team e.g. America"],["Away team e.g. Chivas","Away team e.g. Chivas"],
+    ["Competition","Competition"],["Add Match","Add Match"],
+    ["📝 Update Scores & Remove Matches","📝 Update Scores & Remove Matches"],
+    ["Upcoming","Upcoming"],["Live","Live"],["Finished","Finished"],["Save","Save"],["Saving…","Saving…"],["Saved ✓","Saved ✓"],
+    ["🏆 Publicar Ganador","🏆 Publish Winner"],["Publicar Ganador","Publish Winner"],
+    ["Crea una jornada primero","Create a jornada first"],["No hay jugadores","No players"],
+    ["No hay ganadores publicados.","No winners published."],["Elige jornada y jugador","Pick jornada and player"],
+    ["¡Ganador publicado! 🏆","Winner published! 🏆"],["Ganador borrado","Winner deleted"],
+    ["📢 Publicar Anuncio","📢 Publish Announcement"],["Contacto (tel/WhatsApp)","Contact (phone/WhatsApp)"],
+    ["Título","Title"],["Descripción","Description"],["Publicar Anuncio","Publish Announcement"],
+    ["No hay anuncios.","No announcements."],["Pon un título","Enter a title"],
+    ["¡Anuncio publicado! 📢","Announcement published! 📢"],["Anuncio borrado","Announcement deleted"],
+    ["Ocultar","Hide"],["Mostrar","Show"],["No se pudo actualizar","Could not update"],["No se pudo borrar","Could not delete"],
+    ["💵 Pagos","💵 Payments"],["Sin jornada.","No jornada."],["No hay quinielas en esta jornada.","No quinielas in this jornada."],
+    ["Pagado ✓","Paid ✓"],["No pagado","Not paid"],["Marcado pagado ✓","Marked paid ✓"],["Marcado no pagado","Marked not paid"],
+    ["📥 Descargar Quinielas (CSV)","📥 Download Quinielas (CSV)"],["Descargar CSV","Download CSV"],
+    ["Descarga las quinielas de la jornada para importar a Google Sheets.","Download the jornada's quinielas to import into Google Sheets."],
+    ["Elige una jornada","Pick a jornada"],["CSV descargado 📥","CSV downloaded 📥"],
+    ["💰 The Pot","💰 The Pot"],["Payment Status","Payment Status"],["No players yet!","No players yet!"],
+    ["Error al guardar: ","Error saving: "],["Failed: ","Failed: "],["Error: ","Error: "],
+    ["Enter a jornada number and season","Enter a jornada number and season"],
+    ["Pick a jornada (create one first)","Pick a jornada (create one first)"],
+    ["Enter both team names","Enter both team names"],["Score updated! 🎯","Score updated! 🎯"],
+    ["Save failed","Save failed"],["Match deleted","Match deleted"],["Delete failed","Delete failed"]
+  ];
+  const RULES = [
+    {re:/^(\d+)\s+quinielas?\s+en esta jornada$/, es:m=>m[0], en:m=>m[1]+" quiniela"+(m[1]=="1"?"":"s")+" in this jornada"},
+    {re:/^(\d+)\s+quiniela"?s?"? in this jornada$/, es:m=>m[1]+" quiniela"+(m[1]=="1"?"":"s")+" en esta jornada", en:m=>m[0]},
+    {re:/^(\d+) aciertos · (\d+) decididos$/, es:m=>m[0], en:m=>m[1]+" correct · "+m[2]+" decided"},
+    {re:/^(\d+) correct · (\d+) decided$/, es:m=>m[1]+" aciertos · "+m[2]+" decididos", en:m=>m[0]},
+    {re:/^(\d+) de (\d+) pagadas$/, es:m=>m[0], en:m=>m[1]+" of "+m[2]+" paid"},
+    {re:/^(\d+) of (\d+) paid$/, es:m=>m[1]+" de "+m[2]+" pagadas", en:m=>m[0]},
+    {re:/^(\d+) predicciones guardadas 🎯$/, es:m=>m[0], en:m=>m[1]+" predictions saved 🎯"},
+    {re:/^(\d+) predictions saved 🎯$/, es:m=>m[1]+" predicciones guardadas 🎯", en:m=>m[0]},
+    {re:/^Quiniela (\d+) añadida — haz tus picks ⚽$/, es:m=>m[0], en:m=>"Quiniela "+m[1]+" added — make your picks ⚽"},
+    {re:/^Quiniela (\d+) added — make your picks ⚽$/, es:m=>"Quiniela "+m[1]+" añadida — haz tus picks ⚽", en:m=>m[0]},
+    {re:/^Jornada (\d+) created! 🗓️$/, es:m=>m[0], en:m=>m[0]},
+  ];
+  const toEN={}, toES={};
+  for (const [es,en] of PAIRS){ toEN[es]=en; toEN[en]=en; toES[en]=es; toES[es]=es; }
+  function detect(){ try{const s=localStorage.getItem('lajugada_lang'); if(s==='en'||s==='es') return s;}catch(e){} return (navigator.language||'es').toLowerCase().indexOf('en')===0?'en':'es'; }
+  let lang = detect(), busy=false;
+  function mapText(txt, target){
+    const key=txt.trim(); if(!key) return null;
+    const d = target==='en'?toEN:toES;
+    if(d[key]!==undefined && d[key]!==key) return txt.replace(key, d[key]);
+    for(const r of RULES){ const m=key.match(r.re); if(m){ const out=(target==='en'?r.en:r.es)(m); if(out&&out!==key) return txt.replace(key,out); } }
+    return null;
+  }
+  function walk(node, target){
+    if(node.nodeType===3){ const rep=mapText(node.nodeValue,target); if(rep!==null) node.nodeValue=rep; return; }
+    if(node.nodeType!==1) return;
+    const t=node.tagName; if(t==='SCRIPT'||t==='STYLE') return;
+    if(node.hasAttribute&&node.hasAttribute('placeholder')){ const rep=mapText(node.getAttribute('placeholder'),target); if(rep!==null) node.setAttribute('placeholder',rep); }
+    for(let c=node.firstChild;c;c=c.nextSibling) walk(c,target);
+  }
+  function toggles(){ document.querySelectorAll('.lang-toggle').forEach(b=> b.textContent = lang==='en'?'ES':'EN'); }
+  function translateAll(){ busy=true; walk(document.body,lang); busy=false; document.documentElement.lang=lang; toggles(); }
+  function setLang(l){ lang=l; try{localStorage.setItem('lajugada_lang',l);}catch(e){} translateAll(); }
+  const obs=new MutationObserver(ms=>{ if(busy) return; busy=true;
+    for(const m of ms){ m.addedNodes.forEach(n=> walk(n,lang)); if(m.type==='characterData'){ const rep=mapText(m.target.nodeValue,lang); if(rep!==null) m.target.nodeValue=rep; } }
+    busy=false; });
+  function start(){ translateAll(); obs.observe(document.body,{childList:true,subtree:true,characterData:true});
+    document.querySelectorAll('.lang-toggle').forEach(b=> b.addEventListener('click',()=> setLang(lang==='en'?'es':'en'))); }
+  if(document.readyState==='loading') document.addEventListener('DOMContentLoaded',start); else start();
+})();
+</script>
+
 </body>
 </html>
