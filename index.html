@@ -130,6 +130,9 @@
     /* POT */
     .pot-hero { background: var(--bg-card); border: 1px solid var(--border); border-radius: var(--radius); padding: 1.5rem; text-align: center; margin-bottom: 1rem; }
     .pot-amount { font-size: 3rem; font-weight: 800; color: var(--green); line-height: 1; margin-bottom: 0.25rem; }
+    .jornada-pot { margin: 0 0 0.9rem; padding: 0.75rem 1rem; background: linear-gradient(135deg, rgba(31,122,52,0.16), rgba(14,74,29,0.16)); border: 1px solid var(--green); border-radius: 14px; display: flex; align-items: center; justify-content: space-between; gap: 0.75rem; }
+    .jornada-pot .jp-label { font-size: 0.9rem; font-weight: 700; color: var(--text); }
+    .jornada-pot .jp-amount { font-size: 1.7rem; font-weight: 800; color: var(--green); white-space: nowrap; }
     .pot-label { font-size: 0.85rem; color: var(--muted); margin-bottom: 1.25rem; }
     .pot-splits { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 0.75rem; }
     .pot-split { background: var(--surface); border-radius: 10px; padding: 0.75rem; }
@@ -239,6 +242,7 @@
       <div class="entry-selector-title">🗓️ Jornada</div>
       <select class="form-input" id="jornada-select"></select>
     </div>
+    <div id="jornada-pot" class="jornada-pot hidden"></div>
     <div id="entry-selector" class="entry-selector hidden">
       <div class="entry-selector-title">🎟️ Tus Quinielas</div>
       <div class="entry-tabs" id="entry-tabs"></div>
@@ -372,7 +376,7 @@
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M8 21V10M12 21V3M16 21v-6"/></svg>
       Resultados
     </button>
-    <button type="button" class="nav-item" data-page="pot">
+    <button type="button" class="nav-item hidden" data-page="pot" id="pot-nav-btn">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 3"/></svg>
       Pot
     </button>
@@ -461,7 +465,10 @@ function showApp(user) {
   viewAuth.classList.add("hidden");
   viewApp.classList.remove("hidden");
   document.getElementById("user-label").textContent = user.email || "";
-  if (isAdmin()) document.getElementById("admin-nav-btn").classList.remove("hidden");
+  if (isAdmin()) {
+    document.getElementById("admin-nav-btn").classList.remove("hidden");
+    document.getElementById("pot-nav-btn").classList.remove("hidden");
+  }
   loadAppData();
 }
 
@@ -652,7 +659,19 @@ submitAllBtn.addEventListener("click", async () => {
   }
 });
 
+// Show the admin-set pot for the current jornada to everyone (hidden if unset/zero).
+function renderJornadaPot() {
+  const el = document.getElementById("jornada-pot");
+  if (!el) return;
+  const j = allJornadas.find(x => x.id === currentJornadaId);
+  const amount = j ? (Number(j.pot_amount) || 0) : 0;
+  if (!currentJornadaId || amount <= 0) { el.classList.add("hidden"); el.innerHTML = ""; return; }
+  el.innerHTML = `<span class="jp-label">Bote de la Jornada</span><span class="jp-amount">$${amount.toLocaleString()}</span>`;
+  el.classList.remove("hidden");
+}
+
 function renderMatches() {
+  renderJornadaPot();
   if (!currentJornadaId) {
     matchesBanner.classList.add("hidden");
     matchList.innerHTML = '<li class="empty">Elige una jornada para empezar.</li>';
@@ -881,10 +900,31 @@ function renderJornadaControls() {
       list.innerHTML = allJornadas.map(j => {
         const games = allMatches.filter(m => m.jornada_id === j.id).length;
         const dl = j.deadline ? formatKickoff(j.deadline) : "no deadline";
-        return `<div style="font-size:0.8rem;color:var(--muted);padding:0.3rem 0;border-top:1px solid var(--border);">
+        const pot = (j.pot_amount != null ? Number(j.pot_amount) : 0);
+        return `<div style="font-size:0.8rem;color:var(--muted);padding:0.45rem 0;border-top:1px solid var(--border);">
           <strong style="color:var(--text);">Jornada ${j.number}</strong> · ${trim(j.season)} · ${games} game(s) · closes ${dl} · <span style="color:${j.status==='open'?'var(--accent)':'var(--muted)'}">${j.status}</span>
+          <div style="margin-top:0.45rem;display:flex;gap:0.4rem;align-items:center;flex-wrap:wrap;">
+            <span style="color:var(--text);font-weight:600;">💰 Bote $</span>
+            <input type="number" min="0" step="1" value="${pot}" data-pot-input="${j.id}" class="form-input" style="max-width:110px;padding:0.3rem 0.5rem;" />
+            <button class="add-btn" data-save-pot="${j.id}" style="width:auto;padding:0.35rem 0.8rem;font-size:0.75rem;">Guardar bote</button>
+          </div>
         </div>`;
       }).join("");
+      list.querySelectorAll("[data-save-pot]").forEach(btn => {
+        btn.addEventListener("click", async () => {
+          const jid = parseInt(btn.dataset.savePot);
+          const input = list.querySelector(`[data-pot-input="${jid}"]`);
+          const amount = parseFloat(input.value) || 0;
+          btn.disabled = true; const prev = btn.textContent; btn.textContent = "Guardando…";
+          const { error } = await sb.from("jornadas").update({ pot_amount: amount }).eq("id", jid);
+          btn.disabled = false; btn.textContent = prev;
+          if (error) { showToast("No se pudo guardar el bote: " + error.message); return; }
+          const jj = allJornadas.find(x => x.id === jid);
+          if (jj) jj.pot_amount = amount;
+          showToast(`Bote Jornada ${jj ? jj.number : ""} = $${amount} ✓`);
+          renderJornadaPot();
+        });
+      });
     }
   }
 }
@@ -1319,6 +1359,7 @@ else boot();
     ["Algo salió mal.","Something went wrong."],
     ["Cerrar sesión","Sign out"],
     ["Partidos","Matches"],["Resultados","Standings"],["Bote","Pot"],["Anuncios","Anuncios"],["Admin","Admin"],
+    ["Bote de la Jornada","Jornada Pot"],["Guardar bote","Save pot"],
     ["Elige una jornada y haz tus predicciones.","Pick a jornada and make your predictions."],
     ["🗓️ Jornada","🗓️ Jornada"],["No hay jornadas todavía","No jornadas yet"],
     ["🎟️ Tus Quinielas","🎟️ Your Quinielas"],["+ Nueva Quiniela","+ New Quiniela"],
