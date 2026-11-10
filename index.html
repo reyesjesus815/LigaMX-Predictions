@@ -1328,7 +1328,25 @@ function renderPagos() {
       showToast(newPaid ? "Marcado pagado ✓" : "Marcado no pagado");
       renderPagos();
     });
-    row.appendChild(btn);
+    const actions = document.createElement("div");
+    actions.style = "display:flex;gap:0.4rem;align-items:center;";
+    actions.appendChild(btn);
+    const del = document.createElement("button");
+    del.className = "delete-btn";
+    del.textContent = "🗑";
+    del.addEventListener("click", async () => {
+      if (!confirm(`¿Borrar la quiniela de "${who}" (Q${q.entry})? No se puede deshacer.`)) return;
+      const mIds = allMatches.filter(m => m.jornada_id === jid).map(m => m.id);
+      const { error } = await sb.from("predictions").delete()
+        .eq("user_id", q.uid).eq("entry_number", q.entry).in("match_id", mIds);
+      if (error) { showToast("No se pudo borrar: " + error.message); return; }
+      allPredictions = allPredictions.filter(p => !(p.user_id === q.uid && (p.entry_number||1) === q.entry && mIds.includes(p.match_id)));
+      showToast("Quiniela borrada");
+      renderPagos();
+      if (jid === currentJornadaId) { initQuinielas(); renderQuinielaSelector(); renderMatches(); }
+    });
+    actions.appendChild(del);
+    row.appendChild(actions);
     list.appendChild(row);
   });
 }
@@ -1452,6 +1470,7 @@ else boot();
     ["¡Anuncio publicado! 📢","Announcement published! 📢"],["Anuncio borrado","Announcement deleted"],
     ["Ocultar","Hide"],["Mostrar","Show"],["No se pudo actualizar","Could not update"],["No se pudo borrar","Could not delete"],
     ["💵 Pagos","💵 Payments"],["Sin jornada.","No jornada."],["No hay quinielas en esta jornada.","No quinielas in this jornada."],
+    ["Quiniela borrada","Quiniela deleted"],
     ["Pagado ✓","Paid ✓"],["No pagado","Not paid"],["Marcado pagado ✓","Marked paid ✓"],["Marcado no pagado","Marked not paid"],
     ["📥 Descargar Quinielas (CSV)","📥 Download Quinielas (CSV)"],["Descargar CSV","Download CSV"],
     ["Descarga las quinielas de la jornada para importar a Google Sheets.","Download the jornada's quinielas to import into Google Sheets."],
