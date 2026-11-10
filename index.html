@@ -908,6 +908,7 @@ function renderJornadaControls() {
             <span style="color:var(--text);font-weight:600;">💰 Bote $</span>
             <input type="number" min="0" step="1" value="${pot}" data-pot-input="${j.id}" class="form-input" style="max-width:110px;padding:0.3rem 0.5rem;" />
             <button class="add-btn" data-save-pot="${j.id}" style="width:auto;padding:0.35rem 0.8rem;font-size:0.75rem;">Guardar bote</button>
+            <button class="delete-btn" data-del-jornada="${j.id}" data-jnum="${j.number}">🗑 Borrar jornada</button>
           </div>
         </div>`;
       }).join("");
@@ -924,6 +925,39 @@ function renderJornadaControls() {
           if (jj) jj.pot_amount = amount;
           showToast(`Bote Jornada ${jj ? jj.number : ""} = $${amount} ✓`);
           renderJornadaPot();
+        });
+      });
+      list.querySelectorAll("[data-del-jornada]").forEach(btn => {
+        btn.addEventListener("click", async () => {
+          const jid = parseInt(btn.dataset.delJornada);
+          const jnum = btn.dataset.jnum;
+          const matchIds = allMatches.filter(m => m.jornada_id === jid).map(m => m.id);
+          if (!confirm(`¿Borrar la Jornada ${jnum}?\n\nEsto elimina la jornada, sus ${matchIds.length} partido(s) y TODAS las quinielas de esa jornada. No se puede deshacer.`)) return;
+          btn.disabled = true; btn.textContent = "Borrando…";
+          try {
+            if (matchIds.length) {
+              let r = await sb.from("predictions").delete().in("match_id", matchIds);
+              if (r.error) throw r.error;
+              r = await sb.from("matches").delete().eq("jornada_id", jid);
+              if (r.error) throw r.error;
+            }
+            let r = await sb.from("winners").delete().eq("jornada_id", jid);
+            if (r.error) throw r.error;
+            r = await sb.from("jornadas").delete().eq("id", jid);
+            if (r.error) throw r.error;
+          } catch (err) {
+            btn.disabled = false; btn.textContent = "🗑 Borrar jornada";
+            showToast("No se pudo borrar: " + err.message);
+            return;
+          }
+          allPredictions = allPredictions.filter(p => !matchIds.includes(p.match_id));
+          allMatches = allMatches.filter(m => m.jornada_id !== jid);
+          allWinners = allWinners.filter(w => w.jornada_id !== jid);
+          allJornadas = allJornadas.filter(x => x.id !== jid);
+          if (currentJornadaId === jid) currentJornadaId = null;
+          showToast(`Jornada ${jnum} borrada`);
+          renderJornadaSelect(); initQuinielas(); renderQuinielaSelector();
+          renderMatches(); renderJornadaControls(); renderWinnerAdmin(); renderWinnerBanner();
         });
       });
     }
@@ -1375,7 +1409,7 @@ else boot();
     ["Algo salió mal.","Something went wrong."],
     ["Cerrar sesión","Sign out"],
     ["Partidos","Matches"],["Resultados","Standings"],["Bote","Pot"],["Anuncios","Anuncios"],["Admin","Admin"],
-    ["Bote de la Jornada","Jornada Pot"],["Guardar bote","Save pot"],
+    ["Bote de la Jornada","Jornada Pot"],["Guardar bote","Save pot"],["🗑 Borrar jornada","🗑 Delete jornada"],
     ["Elige una jornada y haz tus predicciones.","Pick a jornada and make your predictions."],
     ["🗓️ Jornada","🗓️ Jornada"],["No hay jornadas todavía","No jornadas yet"],
     ["🎟️ Tus Quinielas","🎟️ Your Quinielas"],["+ Nueva Quiniela","+ New Quiniela"],
