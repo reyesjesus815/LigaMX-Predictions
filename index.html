@@ -264,20 +264,10 @@
   </section>
 
   <section id="page-pot" class="page hidden">
-    <h2 class="page-title">💰 The Pot</h2>
-    <p class="page-desc">$5 per entry. Track who has paid.</p>
-    <div class="pot-hero">
-      <div class="pot-amount" id="pot-total">$0</div>
-      <div class="pot-label" id="pot-label">0 entries paid</div>
-      <div class="pot-splits">
-        <div class="pot-split"><div class="pot-split-val" id="pot-1st">$0</div><div class="pot-split-key">🥇 1st place</div></div>
-        <div class="pot-split"><div class="pot-split-val" id="pot-2nd">$0</div><div class="pot-split-key">🥈 2nd place</div></div>
-        <div class="pot-split"><div class="pot-split-val" id="pot-3rd">$0</div><div class="pot-split-key">🥉 3rd place</div></div>
-      </div>
-    </div>
-    <div class="section-title">Payment Status</div>
-    <ul id="member-list" class="member-list"></ul>
-    <p style="font-size:0.75rem;color:var(--muted);margin-top:1rem;text-align:center;">Admin can tap + or − to track entries paid</p>
+    <h2 class="page-title">💵 Pagos</h2>
+    <p class="page-desc">Marca cada quiniela como pagada y borra las que no correspondan.</p>
+    <select class="form-input" id="pagos-jornada"></select>
+    <div id="pagos-list" style="margin-top:0.85rem;"></div>
   </section>
 
   <section id="page-anuncios" class="page hidden">
@@ -354,11 +344,6 @@
       <div id="ad-admin-list" style="margin-top:0.85rem;"></div>
     </div>
     <div class="admin-card">
-      <div class="admin-card-title">💵 Pagos</div>
-      <select class="form-input" id="pagos-jornada"></select>
-      <div id="pagos-list" style="margin-top:0.85rem;"></div>
-    </div>
-    <div class="admin-card">
       <div class="admin-card-title">📥 Descargar Quinielas (CSV)</div>
       <div class="add-match-form">
         <select class="form-input" id="export-jornada"></select>
@@ -378,8 +363,8 @@
       Resultados
     </button>
     <button type="button" class="nav-item hidden" data-page="pot" id="pot-nav-btn">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 3"/></svg>
-      Pot
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="6" width="20" height="12" rx="2"/><circle cx="12" cy="12" r="2.5"/></svg>
+      Pagos
     </button>
     <button type="button" class="nav-item" data-page="anuncios">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 11l15-5v12L3 13z"/><path d="M11.6 16.8a3 3 0 1 1-5.8-1.6"/></svg>
@@ -522,7 +507,7 @@ document.querySelectorAll(".nav-item").forEach(btn => {
     document.querySelectorAll(".nav-item").forEach(b => b.classList.toggle("active", b.dataset.page === page));
     pages.forEach(p => { const el = document.getElementById(`page-${p}`); if(el) el.classList.toggle("hidden", p !== page); });
     if (page === "leaderboard") renderLeaderboard();
-    if (page === "pot") renderPot();
+    if (page === "pot") renderPagos();
     if (page === "anuncios") renderAnuncios();
     if (page === "admin") renderAdmin();
   });
@@ -1469,7 +1454,8 @@ else boot();
     ["No hay anuncios.","No announcements."],["Pon un título","Enter a title"],
     ["¡Anuncio publicado! 📢","Announcement published! 📢"],["Anuncio borrado","Announcement deleted"],
     ["Ocultar","Hide"],["Mostrar","Show"],["No se pudo actualizar","Could not update"],["No se pudo borrar","Could not delete"],
-    ["💵 Pagos","💵 Payments"],["Sin jornada.","No jornada."],["No hay quinielas en esta jornada.","No quinielas in this jornada."],
+    ["💵 Pagos","💵 Payments"],["Pagos","Payments"],["Sin jornada.","No jornada."],["No hay quinielas en esta jornada.","No quinielas in this jornada."],
+    ["Marca cada quiniela como pagada y borra las que no correspondan.","Mark each quiniela as paid and delete any that don't belong."],
     ["Quiniela borrada","Quiniela deleted"],
     ["Pagado ✓","Paid ✓"],["No pagado","Not paid"],["Marcado pagado ✓","Marked paid ✓"],["Marcado no pagado","Marked not paid"],
     ["📥 Descargar Quinielas (CSV)","📥 Download Quinielas (CSV)"],["Descargar CSV","Download CSV"],
