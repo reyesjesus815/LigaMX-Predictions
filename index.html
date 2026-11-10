@@ -331,6 +331,7 @@
           <select class="form-input" id="winner-jornada"></select>
           <select class="form-input" id="winner-player"></select>
         </div>
+        <input class="form-input" id="winner-name-input" placeholder="O escribe un nombre (ganador en persona)" maxlength="40" style="margin-top:0.5rem;" />
         <button class="add-btn" id="post-winner-btn">Publicar Ganador</button>
       </div>
       <div id="winner-list" style="margin-top:0.85rem;"></div>
@@ -978,7 +979,7 @@ function renderWinnerBanner() {
   const latestJornadaId = allWinners[0].jornada_id;
   const names = allWinners
     .filter(w => w.jornada_id === latestJornadaId)
-    .map(w => profileById[w.user_id]?.display_name || "Ganador");
+    .map(w => w.winner_name || profileById[w.user_id]?.display_name || "Ganador");
   const j = jById[latestJornadaId];
   const jLabel = j ? `Jornada ${j.number}` : "";
   const multiple = names.length > 1;
@@ -1014,12 +1015,13 @@ function renderWinnerAdmin() {
   const jById = Object.fromEntries(allJornadas.map(j => [j.id, j]));
   list.innerHTML = "";
   allWinners.forEach(w => {
-    const name = profileById[w.user_id]?.display_name || "Ganador";
+    const name = w.winner_name || profileById[w.user_id]?.display_name || "Ganador";
     const j = jById[w.jornada_id];
     const jLabel = j ? `Jornada ${j.number}` : "Jornada ?";
+    const tag = w.winner_name ? ' <span style="color:var(--muted);font-size:0.72rem;">(en persona)</span>' : "";
     const row = document.createElement("div");
     row.style = "display:flex;justify-content:space-between;align-items:center;gap:0.5rem;padding:0.4rem 0;border-top:1px solid var(--border);font-size:0.82rem;";
-    row.innerHTML = `<span><strong style="color:var(--gold);">🏆 ${jLabel}</strong> · ${name}</span>`;
+    row.innerHTML = `<span><strong style="color:var(--gold);">🏆 ${jLabel}</strong> · ${escapeHtml(name)}${tag}</span>`;
     const del = document.createElement("button");
     del.className = "delete-btn";
     del.textContent = "🗑";
@@ -1039,15 +1041,29 @@ function renderWinnerAdmin() {
 // Post a winner (admin only — the database also enforces admin-only).
 document.getElementById("post-winner-btn").addEventListener("click", async () => {
   const jornadaId = document.getElementById("winner-jornada").value;
+  const nameInput = document.getElementById("winner-name-input");
+  const typedName = (nameInput.value || "").trim();
   const userId = document.getElementById("winner-player").value;
-  if (!jornadaId || !userId) { showToast("Elige jornada y jugador"); return; }
-  const { data, error } = await sb.from("winners")
-    .upsert({ jornada_id: parseInt(jornadaId), user_id: userId }, { onConflict: "jornada_id,user_id" })
-    .select().single();
-  if (error) { showToast("Error: " + error.message); return; }
-  // replace any existing row for this jornada+player, then add to the front
-  allWinners = allWinners.filter(w => !(w.jornada_id === data.jornada_id && w.user_id === data.user_id));
-  allWinners.unshift(data);
+  if (!jornadaId) { showToast("Elige una jornada"); return; }
+  let data, error;
+  if (typedName) {
+    // In-person winner: no account, just a typed name. Plain insert (ties allowed).
+    ({ data, error } = await sb.from("winners")
+      .insert({ jornada_id: parseInt(jornadaId), winner_name: typedName, user_id: null })
+      .select().single());
+    if (error) { showToast("Error: " + error.message); return; }
+    allWinners.unshift(data);
+  } else {
+    // Registered player from the dropdown.
+    if (!userId) { showToast("Elige un jugador o escribe un nombre"); return; }
+    ({ data, error } = await sb.from("winners")
+      .upsert({ jornada_id: parseInt(jornadaId), user_id: userId }, { onConflict: "jornada_id,user_id" })
+      .select().single());
+    if (error) { showToast("Error: " + error.message); return; }
+    allWinners = allWinners.filter(w => !(w.jornada_id === data.jornada_id && w.user_id === data.user_id));
+    allWinners.unshift(data);
+  }
+  nameInput.value = "";
   showToast("¡Ganador publicado! 🏆");
   renderWinnerAdmin(); renderWinnerBanner();
 });
@@ -1390,6 +1406,9 @@ else boot();
     ["📝 Update Scores & Remove Matches","📝 Update Scores & Remove Matches"],
     ["Upcoming","Upcoming"],["Live","Live"],["Finished","Finished"],["Save","Save"],["Saving…","Saving…"],["Saved ✓","Saved ✓"],
     ["🏆 Publicar Ganador","🏆 Publish Winner"],["Publicar Ganador","Publish Winner"],
+    ["O escribe un nombre (ganador en persona)","Or type a name (in-person winner)"],
+    ["Elige un jugador o escribe un nombre","Pick a player or type a name"],["Elige una jornada","Pick a jornada"],
+    ["(en persona)","(in person)"],
     ["Crea una jornada primero","Create a jornada first"],["No hay jugadores","No players"],
     ["No hay ganadores publicados.","No winners published."],["Elige jornada y jugador","Pick jornada and player"],
     ["¡Ganador publicado! 🏆","Winner published! 🏆"],["Ganador borrado","Winner deleted"],
